@@ -605,12 +605,7 @@ window.addEventListener('scroll', () => {
 
 // Visitor Information Modal
 function showVisitorModal() {
-    // Check if visitor has already submitted their information
-    const visitorSubmitted = sessionStorage.getItem('visitorInfoSubmitted');
-    if (visitorSubmitted === 'true') {
-        return; // Don't show modal if already submitted in this session
-    }
-    
+    // Show modal on every page visit
     const visitorModal = document.getElementById('visitorModal');
     if (visitorModal) {
         visitorModal.classList.add('active');
@@ -654,9 +649,6 @@ function saveVisitorInfo(name, contact) {
     
     // Save to localStorage
     localStorage.setItem('visitorInfo', JSON.stringify(existingData));
-    
-    // Mark as submitted in this session
-    sessionStorage.setItem('visitorInfoSubmitted', 'true');
     
     console.log('Visitor information saved:', visitorData);
     return visitorData;
