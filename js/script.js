@@ -603,6 +603,105 @@ window.addEventListener('scroll', () => {
     }
 });
 
+// Visitor Information Modal
+function showVisitorModal() {
+    // Check if visitor has already submitted their information
+    const visitorSubmitted = sessionStorage.getItem('visitorInfoSubmitted');
+    if (visitorSubmitted === 'true') {
+        return; // Don't show modal if already submitted in this session
+    }
+    
+    const visitorModal = document.getElementById('visitorModal');
+    if (visitorModal) {
+        visitorModal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function hideVisitorModal() {
+    const visitorModal = document.getElementById('visitorModal');
+    if (visitorModal) {
+        visitorModal.classList.remove('active');
+        document.body.style.overflow = 'auto';
+    }
+}
+
+// Function to save visitor information
+function saveVisitorInfo(name, contact) {
+    const visitorData = {
+        timestamp: new Date().toISOString(),
+        name: name.trim(),
+        contact: contact.trim(),
+        date: new Date().toLocaleDateString('en-IN', { 
+            year: 'numeric', 
+            month: '2-digit', 
+            day: '2-digit' 
+        }),
+        time: new Date().toLocaleTimeString('en-IN', { 
+            hour: '2-digit', 
+            minute: '2-digit', 
+            second: '2-digit',
+            hour12: false 
+        })
+    };
+    
+    // Get existing visitor data
+    const stored = localStorage.getItem('visitorInfo');
+    const existingData = stored ? JSON.parse(stored) : [];
+    
+    // Add new visitor
+    existingData.push(visitorData);
+    
+    // Save to localStorage
+    localStorage.setItem('visitorInfo', JSON.stringify(existingData));
+    
+    // Mark as submitted in this session
+    sessionStorage.setItem('visitorInfoSubmitted', 'true');
+    
+    console.log('Visitor information saved:', visitorData);
+    return visitorData;
+}
+
+// Handle visitor form submission
+document.addEventListener('DOMContentLoaded', () => {
+    const visitorForm = document.getElementById('visitorForm');
+    const visitorModal = document.getElementById('visitorModal');
+    
+    if (visitorForm) {
+        visitorForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const name = document.getElementById('visitorName').value.trim();
+            const contact = document.getElementById('visitorContact').value.trim();
+            
+            // Validate
+            if (!name || !contact) {
+                alert('Please fill in all fields / कृपया सर्व फील्ड भरा');
+                return;
+            }
+            
+            if (contact.length !== 10 || !/^\d+$/.test(contact)) {
+                alert('Please enter a valid 10-digit contact number / कृपया वैध 10-अंकी संपर्क क्रमांक प्रविष्ट करा');
+                return;
+            }
+            
+            // Save visitor information
+            saveVisitorInfo(name, contact);
+            
+            // Hide modal
+            hideVisitorModal();
+            
+            // Show thank you message
+            alert('Thank you for your information! / आपल्या माहितीसाठी धन्यवाद!');
+        });
+    }
+    
+    // Show modal after a short delay (1 second) on page load
+    setTimeout(() => {
+        showVisitorModal();
+    }, 1000);
+});
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     // Set initial active nav link

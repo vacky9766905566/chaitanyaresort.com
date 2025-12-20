@@ -282,9 +282,6 @@
             <h2>आपल्या बीच गेटअवेसाठी तयार आहात?</h2>
             <p>चैतन्य रिसॉर्ट येथे विश्रांती आणि साहसाचा परिपूर्ण मिश्रण अनुभवा.</p>
             <div class="cta-buttons">
-                <a href="https://wa.me/919112680201" class="btn btn-primary" target="_blank">
-                    <i class="fab fa-whatsapp"></i> WhatsApp द्वारे बुक करा
-                </a>
                 <a href="#contact" class="btn btn-secondary">आमच्याशी संपर्क साधा</a>
             </div>
         </div>
@@ -401,6 +398,29 @@
             <video id="modalVideo" controls playsinline webkit-playsinline>
                 आपला ब्राउझर व्हिडिओ टॅगला समर्थन देत नाही.
             </video>
+        </div>
+    </div>
+
+    <!-- Visitor Information Modal -->
+    <div id="visitorModal" class="visitor-modal">
+        <div class="visitor-modal-content">
+            <div class="visitor-modal-header">
+                <h2>Welcome to Chaitanya Resort</h2>
+                <p>कृपया आपली माहिती प्रविष्ट करा</p>
+            </div>
+            <form id="visitorForm">
+                <div class="form-group">
+                    <label for="visitorName">Name / नाव <span class="required">*</span></label>
+                    <input type="text" id="visitorName" name="name" required placeholder="Enter your name">
+                </div>
+                <div class="form-group">
+                    <label for="visitorContact">Contact Number / संपर्क क्रमांक <span class="required">*</span></label>
+                    <input type="tel" id="visitorContact" name="contact" required placeholder="Enter your contact number" pattern="[0-9]{10}" minlength="10" maxlength="10">
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Submit / सबमिट करा</button>
+                </div>
+            </form>
         </div>
     </div>
 

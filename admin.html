@@ -5,6 +5,111 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WhatsApp Click Tracking - Admin</title>
     <style>
+        /* Login Modal Styles */
+        .login-modal {
+            display: flex;
+            position: fixed;
+            z-index: 10000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .login-modal.hidden {
+            display: none;
+        }
+        
+        .login-content {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            animation: slideDown 0.3s ease;
+        }
+        
+        .login-content h2 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2rem;
+        }
+        
+        .login-form-group {
+            margin-bottom: 20px;
+        }
+        
+        .login-form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        
+        .login-form-group input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+        
+        .login-form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .login-error {
+            color: #dc3545;
+            font-size: 0.9rem;
+            margin-top: 5px;
+            display: none;
+        }
+        
+        .login-error.show {
+            display: block;
+        }
+        
+        .login-btn {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+        
+        .login-btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+    <style>
         * {
             margin: 0;
             padding: 0;
@@ -192,7 +297,28 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-    <div class="container">
+    <!-- Login Modal -->
+    <div id="loginModal" class="login-modal">
+        <div class="login-content">
+            <h2><i class="fas fa-lock"></i> Admin Login</h2>
+            <form id="loginForm">
+                <div class="login-form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required autocomplete="username">
+                </div>
+                <div class="login-form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required autocomplete="current-password">
+                </div>
+                <div class="login-error" id="loginError">
+                    Invalid username or password!
+                </div>
+                <button type="submit" class="login-btn">Login</button>
+            </form>
+        </div>
+    </div>
+    
+    <div class="container" id="adminContent" style="display: none;">
         <h1><i class="fab fa-whatsapp"></i> WhatsApp Click Tracking</h1>
         <p class="subtitle">View and manage WhatsApp button click analytics</p>
         
@@ -227,9 +353,18 @@
             <button class="btn btn-danger" onclick="clearData()">
                 <i class="fas fa-trash"></i> Clear All Data
             </button>
+            <button class="btn btn-danger" onclick="logout()" style="background: #6c757d;">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
         </div>
         
         <div class="filter-section">
+            <label>Filter by Type:</label>
+            <select id="typeFilter" onchange="filterData()">
+                <option value="">All Types</option>
+                <option value="whatsapp">WhatsApp Click</option>
+                <option value="visitor">Visitor Info</option>
+            </select>
             <label>Filter by Number:</label>
             <select id="numberFilter" onchange="filterData()">
                 <option value="">All Numbers</option>
@@ -242,21 +377,25 @@
         </div>
         
         <div class="table-container">
-            <table id="dataTable">
+            <h3 style="margin-top: 30px; margin-bottom: 15px;">All Activity</h3>
+            <table id="mergedTable">
                 <thead>
                     <tr>
                         <th>#</th>
+                        <th>Type</th>
                         <th>Date</th>
                         <th>Time</th>
-                        <th>WhatsApp Number</th>
+                        <th>Name</th>
+                        <th>Customer No</th>
+                        <th>Contact Made to</th>
                         <th>Full Timestamp</th>
                     </tr>
                 </thead>
-                <tbody id="tableBody">
+                <tbody id="mergedTableBody">
                     <tr>
-                        <td colspan="5" class="no-data">
+                        <td colspan="8" class="no-data">
                             <i class="fas fa-inbox"></i>
-                            <p>No tracking data available</p>
+                            <p>No data available</p>
                         </td>
                     </tr>
                 </tbody>
@@ -265,17 +404,100 @@
     </div>
     
     <script>
+        // Login credentials
+        const ADMIN_USERNAME = 'chaitanya';
+        const ADMIN_PASSWORD = 'Password@2025';
+        
+        // Check if user is logged in
+        function checkLogin() {
+            const isLoggedIn = sessionStorage.getItem('adminLoggedIn') === 'true';
+            if (!isLoggedIn) {
+                document.getElementById('loginModal').classList.remove('hidden');
+                document.getElementById('adminContent').style.display = 'none';
+            } else {
+                document.getElementById('loginModal').classList.add('hidden');
+                document.getElementById('adminContent').style.display = 'block';
+                loadData();
+            }
+        }
+        
+        // Handle login form
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('loginError');
+            
+            if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+                sessionStorage.setItem('adminLoggedIn', 'true');
+                checkLogin();
+            } else {
+                errorDiv.classList.add('show');
+                document.getElementById('password').value = '';
+                setTimeout(() => {
+                    errorDiv.classList.remove('show');
+                }, 3000);
+            }
+        });
+        
+        // Logout function (can be called from console: logout())
+        window.logout = function() {
+            sessionStorage.removeItem('adminLoggedIn');
+            checkLogin();
+        };
+        
         let allData = [];
         let filteredData = [];
+        let visitorData = [];
+        let mergedData = [];
         
         // Load data from localStorage
         function loadData() {
+            // Load WhatsApp click data
             const stored = localStorage.getItem('whatsappClickTracking');
             allData = stored ? JSON.parse(stored) : [];
-            filteredData = [...allData];
+            
+            // Load visitor data
+            const visitorStored = localStorage.getItem('visitorInfo');
+            visitorData = visitorStored ? JSON.parse(visitorStored) : [];
+            
+            // Merge both data sources
+            mergeData();
+            
             updateStats();
-            updateTable();
+            updateMergedTable();
             updateFilters();
+        }
+        
+        // Merge WhatsApp clicks and visitor data
+        function mergeData() {
+            mergedData = [];
+            
+            // Add WhatsApp clicks with type identifier
+            allData.forEach(item => {
+                mergedData.push({
+                    ...item,
+                    type: 'whatsapp',
+                    name: null,
+                    contact: null
+                });
+            });
+            
+            // Add visitor data with type identifier
+            visitorData.forEach(item => {
+                mergedData.push({
+                    ...item,
+                    type: 'visitor',
+                    whatsappNumber: null
+                });
+            });
+            
+            // Sort by timestamp (newest first)
+            mergedData.sort((a, b) => 
+                new Date(b.timestamp) - new Date(a.timestamp)
+            );
+            
+            filteredData = [...mergedData];
         }
         
         // Update statistics
@@ -290,47 +512,67 @@
             document.getElementById('todayClicks').textContent = todayClicks;
         }
         
-        // Update table
-        function updateTable() {
-            const tbody = document.getElementById('tableBody');
+        // Update merged table
+        function updateMergedTable() {
+            const tbody = document.getElementById('mergedTableBody');
             
             if (filteredData.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="5" class="no-data">
+                        <td colspan="8" class="no-data">
                             <i class="fas fa-inbox"></i>
-                            <p>No tracking data available</p>
+                            <p>No data available</p>
                         </td>
                     </tr>
                 `;
                 return;
             }
             
-            // Sort by timestamp (newest first)
-            const sortedData = [...filteredData].sort((a, b) => 
-                new Date(b.timestamp) - new Date(a.timestamp)
-            );
-            
-            tbody.innerHTML = sortedData.map((item, index) => `
-                <tr>
-                    <td>${index + 1}</td>
-                    <td>${item.date || 'N/A'}</td>
-                    <td>${item.time || 'N/A'}</td>
-                    <td class="whatsapp-number">+${item.whatsappNumber}</td>
-                    <td>${new Date(item.timestamp).toLocaleString()}</td>
-                </tr>
-            `).join('');
+            tbody.innerHTML = filteredData.map((item, index) => {
+                const typeBadge = item.type === 'whatsapp' 
+                    ? '<span style="background: #25D366; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem;">WhatsApp</span>'
+                    : '<span style="background: #667eea; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem;">Visitor</span>';
+                
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${typeBadge}</td>
+                        <td>${item.date || 'N/A'}</td>
+                        <td>${item.time || 'N/A'}</td>
+                        <td><strong>${item.name || '-'}</strong></td>
+                        <td>${item.contact || '-'}</td>
+                        <td class="whatsapp-number">${item.whatsappNumber ? '+' + item.whatsappNumber : '-'}</td>
+                        <td>${new Date(item.timestamp).toLocaleString()}</td>
+                    </tr>
+                `;
+            }).join('');
         }
         
         // Update filter dropdown
         function updateFilters() {
-            const uniqueNumbers = [...new Set(allData.map(item => item.whatsappNumber))].sort();
+            // Get unique WhatsApp numbers
+            const uniqueWhatsAppNumbers = [...new Set(
+                mergedData
+                    .filter(item => item.whatsappNumber)
+                    .map(item => item.whatsappNumber)
+            )].sort();
+            
+            // Get unique contact numbers
+            const uniqueContacts = [...new Set(
+                mergedData
+                    .filter(item => item.contact)
+                    .map(item => item.contact)
+            )].sort();
+            
+            // Combine and deduplicate
+            const allNumbers = [...new Set([...uniqueWhatsAppNumbers, ...uniqueContacts])].sort();
+            
             const select = document.getElementById('numberFilter');
             
             // Clear existing options except "All Numbers"
             select.innerHTML = '<option value="">All Numbers</option>';
             
-            uniqueNumbers.forEach(num => {
+            allNumbers.forEach(num => {
                 const option = document.createElement('option');
                 option.value = num;
                 option.textContent = `+${num}`;
@@ -340,39 +582,44 @@
         
         // Filter data
         function filterData() {
+            const typeFilter = document.getElementById('typeFilter').value;
             const numberFilter = document.getElementById('numberFilter').value;
             const dateFilter = document.getElementById('dateFilter').value;
             
-            filteredData = allData.filter(item => {
-                const matchesNumber = !numberFilter || item.whatsappNumber === numberFilter;
+            filteredData = mergedData.filter(item => {
+                const matchesType = !typeFilter || item.type === typeFilter;
+                const matchesNumber = !numberFilter || 
+                    item.whatsappNumber === numberFilter || 
+                    item.contact === numberFilter;
                 const matchesDate = !dateFilter || item.timestamp.startsWith(dateFilter);
-                return matchesNumber && matchesDate;
+                return matchesType && matchesNumber && matchesDate;
             });
             
-            updateTable();
+            updateMergedTable();
         }
         
         // Clear filters
         function clearFilters() {
+            document.getElementById('typeFilter').value = '';
             document.getElementById('numberFilter').value = '';
             document.getElementById('dateFilter').value = '';
-            filteredData = [...allData];
-            updateTable();
+            filteredData = [...mergedData];
+            updateMergedTable();
         }
         
         // Download data as JSON
         function downloadData() {
-            if (allData.length === 0) {
+            if (mergedData.length === 0) {
                 alert('No data to download');
                 return;
             }
             
-            const jsonString = JSON.stringify(allData, null, 2);
+            const jsonString = JSON.stringify(mergedData, null, 2);
             const blob = new Blob([jsonString], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `whatsapp-clicks-${new Date().toISOString().split('T')[0]}.json`;
+            a.download = `all-activity-${new Date().toISOString().split('T')[0]}.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -389,10 +636,13 @@
         function clearData() {
             if (confirm('Are you sure you want to clear all tracking data? This action cannot be undone.')) {
                 localStorage.removeItem('whatsappClickTracking');
+                localStorage.removeItem('visitorInfo');
                 allData = [];
+                visitorData = [];
+                mergedData = [];
                 filteredData = [];
                 updateStats();
-                updateTable();
+                updateMergedTable();
                 updateFilters();
                 alert('All data cleared!');
             }
@@ -427,22 +677,16 @@
         
         // Remove duplicates function
         function removeDuplicates() {
-            const data = allData;
-            if (data.length === 0) {
-                alert('No data to clean!');
-                return;
-            }
+            // Clean WhatsApp clicks duplicates
+            const whatsappData = allData;
+            const uniqueWhatsAppData = [];
             
-            // Remove duplicates: same number and timestamp within 1 second
-            const uniqueData = [];
-            
-            data.forEach((item) => {
+            whatsappData.forEach((item) => {
                 const timestamp = new Date(item.timestamp).getTime();
-                
-                // Check if we've seen a similar entry (same number, within 1 second)
                 let isDuplicate = false;
-                for (let i = 0; i < uniqueData.length; i++) {
-                    const existing = uniqueData[i];
+                
+                for (let i = 0; i < uniqueWhatsAppData.length; i++) {
+                    const existing = uniqueWhatsAppData[i];
                     if (existing.whatsappNumber === item.whatsappNumber) {
                         const existingTime = new Date(existing.timestamp).getTime();
                         if (Math.abs(timestamp - existingTime) < 1000) {
@@ -453,26 +697,55 @@
                 }
                 
                 if (!isDuplicate) {
-                    uniqueData.push(item);
+                    uniqueWhatsAppData.push(item);
                 }
             });
             
-            const removed = data.length - uniqueData.length;
+            // Clean visitor data duplicates
+            const uniqueVisitorData = [];
+            visitorData.forEach((item) => {
+                const timestamp = new Date(item.timestamp).getTime();
+                let isDuplicate = false;
+                
+                for (let i = 0; i < uniqueVisitorData.length; i++) {
+                    const existing = uniqueVisitorData[i];
+                    if (existing.contact === item.contact && existing.name === item.name) {
+                        const existingTime = new Date(existing.timestamp).getTime();
+                        if (Math.abs(timestamp - existingTime) < 1000) {
+                            isDuplicate = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (!isDuplicate) {
+                    uniqueVisitorData.push(item);
+                }
+            });
             
-            if (removed > 0) {
-                localStorage.setItem('whatsappClickTracking', JSON.stringify(uniqueData));
+            const whatsappRemoved = whatsappData.length - uniqueWhatsAppData.length;
+            const visitorRemoved = visitorData.length - uniqueVisitorData.length;
+            const totalRemoved = whatsappRemoved + visitorRemoved;
+            
+            if (totalRemoved > 0) {
+                localStorage.setItem('whatsappClickTracking', JSON.stringify(uniqueWhatsAppData));
+                localStorage.setItem('visitorInfo', JSON.stringify(uniqueVisitorData));
                 loadData();
-                alert(`Removed ${removed} duplicate entries!`);
+                alert(`Removed ${totalRemoved} duplicate entries! (${whatsappRemoved} WhatsApp, ${visitorRemoved} Visitor)`);
             } else {
                 alert('No duplicates found!');
             }
         }
         
-        // Load data on page load
-        loadData();
+        // Check login on page load
+        checkLogin();
         
-        // Auto-refresh every 30 seconds
-        setInterval(loadData, 30000);
+        // Auto-refresh every 30 seconds (only if logged in)
+        setInterval(() => {
+            if (sessionStorage.getItem('adminLoggedIn') === 'true') {
+                loadData();
+            }
+        }, 30000);
     </script>
 </body>
 </html>
