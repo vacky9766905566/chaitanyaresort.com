@@ -726,17 +726,37 @@ async function saveDirectlyToFile(visitorData) {
         
         if (!dataDirHandle) {
             // Request directory permission (one-time only)
+            // Try to use startIn option if available (Chrome 120+)
+            const pickerOptions = {};
+            
+            // Try to set startIn to the project directory if possible
+            try {
+                // Check if we can use startIn (not all browsers support this)
+                if ('startIn' in window.showDirectoryPicker) {
+                    // This won't work with file://, but we can try
+                    pickerOptions.startIn = 'documents'; // Default fallback
+                }
+            } catch (e) {
+                // Ignore if not supported
+            }
+            
             const userConfirmed = confirm(
-                'To save data to files, please select the "data" folder.\n\n' +
-                'This is a one-time permission. After this, all data will be saved automatically.\n\n' +
-                'Navigate to: C:\\Project\\chaitanyaresort.com\\data'
+                'To save data automatically, please select the "data" folder.\n\n' +
+                'Navigate to: C:\\Project\\chaitanyaresort.com\\data\n\n' +
+                'This is a ONE-TIME permission. After this, all data will save automatically without asking.'
             );
             
             if (!userConfirmed) {
                 throw new Error('User cancelled directory selection');
             }
             
-            dataDirHandle = await window.showDirectoryPicker();
+            dataDirHandle = await window.showDirectoryPicker(pickerOptions);
+            
+            // Verify it's a valid directory handle
+            if (!dataDirHandle || typeof dataDirHandle.getFileHandle !== 'function') {
+                throw new Error('Invalid directory handle received');
+            }
+            
             // Store handle in IndexedDB for persistence
             await storeDirectoryHandle(dataDirHandle);
             console.log('✓ Directory permission granted and stored');
@@ -745,8 +765,15 @@ async function saveDirectlyToFile(visitorData) {
         // Verify handle has getFileHandle method
         if (typeof dataDirHandle.getFileHandle !== 'function') {
             console.error('Invalid directory handle, requesting new one');
+            // Clear invalid handle first
+            await clearStoredDirectoryHandle();
+            // Request new handle
             dataDirHandle = await window.showDirectoryPicker();
-            await storeDirectoryHandle(dataDirHandle);
+            if (dataDirHandle && typeof dataDirHandle.getFileHandle === 'function') {
+                await storeDirectoryHandle(dataDirHandle);
+            } else {
+                throw new Error('Failed to get valid directory handle');
+            }
         }
         
         // Read existing data from visitors.json
@@ -806,21 +833,45 @@ window.visitorsData = ${JSON.stringify(existingData, null, 2)};
 // Store directory handle in IndexedDB for persistence
 async function storeDirectoryHandle(handle) {
     try {
+        if (!handle || typeof handle.getFileHandle !== 'function') {
+            throw new Error('Invalid handle provided');
+        }
+        
         const db = await openDB();
         const tx = db.transaction('handles', 'readwrite');
         const store = tx.objectStore('handles');
-        // Store handle (IndexedDB can store FileSystemDirectoryHandle)
+        
+        // Store handle (IndexedDB can store FileSystemDirectoryHandle in modern browsers)
         await store.put(handle, 'dataDir');
-        await tx.complete;
-        console.log('Directory handle stored');
+        
+        // Wait for transaction to complete
+        await new Promise((resolve, reject) => {
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+        
+        // Also store in window for immediate access (faster)
+        window.dataDirHandle = handle;
+        
+        console.log('✓ Directory handle stored in IndexedDB and window');
     } catch (error) {
         console.warn('Could not store directory handle:', error);
+        // Fallback: store in window only (won't persist across reloads)
+        window.dataDirHandle = handle;
+        console.log('Stored handle in window as fallback');
     }
 }
 
 // Get stored directory handle from IndexedDB
 async function getStoredDirectoryHandle() {
     try {
+        // First check window (faster, for same session)
+        if (window.dataDirHandle && typeof window.dataDirHandle.getFileHandle === 'function') {
+            console.log('Using directory handle from window');
+            return window.dataDirHandle;
+        }
+        
+        // Then check IndexedDB (for persistence across reloads)
         const db = await openDB();
         const tx = db.transaction('handles', 'readonly');
         const store = tx.objectStore('handles');
@@ -828,6 +879,9 @@ async function getStoredDirectoryHandle() {
         
         // Verify handle is valid
         if (handle && typeof handle.getFileHandle === 'function') {
+            // Also store in window for faster access
+            window.dataDirHandle = handle;
+            console.log('Retrieved directory handle from IndexedDB');
             return handle;
         }
         
