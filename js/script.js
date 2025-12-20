@@ -47,22 +47,24 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
 let lastScroll = 0;
 const navbar = document.querySelector('.navbar');
 
-window.addEventListener('scroll', () => {
-    const currentScroll = window.pageYOffset;
-    
-    if (currentScroll > 100) {
-        navbar.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.15)';
-        navbar.style.background = 'rgba(255, 255, 255, 0.98)';
-    } else {
-        navbar.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.1)';
-        navbar.style.background = 'rgba(255, 255, 255, 0.95)';
-    }
-    
-    // Update active nav link based on scroll position
-    updateActiveNavLink();
-    
-    lastScroll = currentScroll;
-});
+if (navbar) {
+    window.addEventListener('scroll', () => {
+        const currentScroll = window.pageYOffset;
+        
+        if (currentScroll > 100) {
+            navbar.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.15)';
+            navbar.style.background = 'rgba(255, 255, 255, 0.98)';
+        } else {
+            navbar.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.1)';
+            navbar.style.background = 'rgba(255, 255, 255, 0.95)';
+        }
+        
+        // Update active nav link based on scroll position
+        updateActiveNavLink();
+        
+        lastScroll = currentScroll;
+    });
+}
 
 // Update active navigation link based on scroll position
 function updateActiveNavLink() {
@@ -318,17 +320,24 @@ function extractWhatsAppNumber(url) {
     return match ? match[1] : null;
 }
 
-// Function to get or initialize click tracking data
-function getClickTrackingData() {
-    const stored = localStorage.getItem('whatsappClickTracking');
-    return stored ? JSON.parse(stored) : [];
+// Function to get or initialize click tracking data from visitors.json
+async function getClickTrackingData() {
+    // Try to load from visitors.json file
+    try {
+        const allData = await loadAllDataFromFile();
+        // Filter only WhatsApp click data
+        return allData.filter(item => item.type === 'whatsapp' || item.whatsappNumber);
+    } catch (error) {
+        console.warn('Could not load click tracking data from file:', error);
+        return [];
+    }
 }
 
 // Track recent clicks to prevent duplicates (within 2 seconds)
 let recentClicks = new Map();
 
-// Function to save click tracking data with duplicate prevention
-function saveClickTracking(whatsappNumber) {
+// Function to save click tracking data with duplicate prevention - saves to visitors.json
+async function saveClickTracking(whatsappNumber) {
     const now = Date.now();
     const clickKey = `${whatsappNumber}_${Math.floor(now / 2000)}`; // Group by number and 2-second window
     
@@ -341,6 +350,7 @@ function saveClickTracking(whatsappNumber) {
     const clickData = {
         timestamp: new Date().toISOString(),
         whatsappNumber: whatsappNumber,
+        type: 'whatsapp', // Identifier for WhatsApp clicks
         date: new Date().toLocaleDateString('en-IN', { 
             year: 'numeric', 
             month: '2-digit', 
@@ -351,14 +361,25 @@ function saveClickTracking(whatsappNumber) {
             minute: '2-digit', 
             second: '2-digit',
             hour12: false 
-        })
+        }),
+        name: null, // WhatsApp clicks don't have name
+        contact: null // WhatsApp clicks don't have contact
     };
     
-    // Get existing data
-    const existingData = getClickTrackingData();
+    // Get existing data from file
+    let allData = [];
+    try {
+        allData = await loadAllDataFromFile();
+    } catch (error) {
+        console.log('Starting fresh data file');
+        allData = [];
+    }
+    
+    // Get only WhatsApp clicks for duplicate check
+    const whatsappClicks = allData.filter(item => item.type === 'whatsapp' || item.whatsappNumber);
     
     // Additional check: prevent exact duplicates (same number and timestamp within 1 second)
-    const lastClick = existingData[existingData.length - 1];
+    const lastClick = whatsappClicks[whatsappClicks.length - 1];
     if (lastClick && 
         lastClick.whatsappNumber === whatsappNumber && 
         (now - new Date(lastClick.timestamp).getTime()) < 1000) {
@@ -366,11 +387,11 @@ function saveClickTracking(whatsappNumber) {
         return lastClick;
     }
     
-    // Add new click
-    existingData.push(clickData);
+    // Add new click to all data
+    allData.push(clickData);
     
-    // Save to localStorage
-    localStorage.setItem('whatsappClickTracking', JSON.stringify(existingData));
+    // Save to visitors.json file
+    await saveAllDataToFile(allData);
     
     // Store in recent clicks map
     recentClicks.set(clickKey, clickData);
@@ -380,13 +401,108 @@ function saveClickTracking(whatsappNumber) {
         recentClicks.delete(clickKey);
     }, 5000);
     
-    // Also save to a JSON file (for download)
-    saveToJSONFile(existingData);
-    
-    // Optional: Send to backend API if available
-    // sendToBackend(clickData);
-    
+    console.log('✓ WhatsApp click saved to visitors.json');
     return clickData;
+}
+
+// Load all data (visitor info + WhatsApp clicks) from visitors.json
+async function loadAllDataFromFile() {
+    const isLocalFile = window.location.protocol === 'file:';
+    
+    if (isLocalFile) {
+        // For file://, try to load from visitors.js (loaded via script tag)
+        if (window.visitorsData && Array.isArray(window.visitorsData)) {
+            return window.visitorsData;
+        }
+        
+        // Try to load via script tag
+        try {
+            await loadVisitorsJS();
+            if (window.visitorsData && Array.isArray(window.visitorsData)) {
+                return window.visitorsData;
+            }
+        } catch (error) {
+            console.warn('Could not load visitors.js:', error);
+        }
+        
+        return [];
+    } else {
+        // For http://, try to fetch from server
+        try {
+            const response = await fetch('get-visitors.php');
+            if (response.ok) {
+                const data = await response.json();
+                return Array.isArray(data) ? data : [];
+            }
+        } catch (error) {
+            console.warn('Could not load from server:', error);
+        }
+        return [];
+    }
+}
+
+// Save all data (visitor info + WhatsApp clicks) to visitors.json
+async function saveAllDataToFile(allData) {
+    const isLocalFile = window.location.protocol === 'file:';
+    
+    if (isLocalFile) {
+        // Use File System Access API to save directly
+        await saveDataArrayToFile(allData);
+    } else {
+        // For http://, save via server (only visitor form data goes through server)
+        // WhatsApp clicks will be saved when visitor form is submitted
+        // For now, we'll handle it in the file:// case
+    }
+}
+
+// Save data array to file using File System Access API
+async function saveDataArrayToFile(allData) {
+    if (!('showDirectoryPicker' in window)) {
+        console.warn('File System Access API not supported, cannot save WhatsApp clicks');
+        return;
+    }
+    
+    try {
+        // Get directory handle (reuse if available)
+        let dataDirHandle = await getStoredDirectoryHandle();
+        
+        if (!dataDirHandle) {
+            // No permission yet, skip saving (will be saved when visitor form is submitted)
+            console.log('No directory permission, WhatsApp click will be saved when visitor form is submitted');
+            return;
+        }
+        
+        // Validate handle
+        if (typeof dataDirHandle.getFileHandle !== 'function') {
+            console.warn('Invalid directory handle');
+            return;
+        }
+        
+        // Create JSON content
+        const jsonContent = JSON.stringify(allData, null, 2);
+        
+        // Create JavaScript content
+        const jsContent = `// Auto-generated JavaScript file from visitors.json
+// This file is updated automatically when visitors.json changes
+window.visitorsData = ${JSON.stringify(allData, null, 2)};
+`;
+        
+        // Write visitors.json
+        const jsonFileHandle = await dataDirHandle.getFileHandle('visitors.json', { create: true });
+        const jsonWritable = await jsonFileHandle.createWritable();
+        await jsonWritable.write(jsonContent);
+        await jsonWritable.close();
+        
+        // Write visitors.js
+        const jsFileHandle = await dataDirHandle.getFileHandle('visitors.js', { create: true });
+        const jsWritable = await jsFileHandle.createWritable();
+        await jsWritable.write(jsContent);
+        await jsWritable.close();
+        
+        console.log('✓ All data saved to visitors.json');
+    } catch (error) {
+        console.warn('Could not save WhatsApp click to file:', error);
+    }
 }
 
 // Function to save data to JSON file (for download)
@@ -400,19 +516,17 @@ function saveToJSONFile(data) {
     window.whatsappTrackingData = data;
 }
 
-// Function to remove duplicate entries from stored data
-function removeDuplicates() {
-    const data = getClickTrackingData();
+// Function to remove duplicate entries from stored data - now reads from file
+async function removeDuplicates() {
+    const data = await getClickTrackingData();
     if (data.length === 0) {
         return data;
     }
     
     // Remove duplicates: same number and timestamp within 1 second
     const uniqueData = [];
-    const seen = new Set();
     
     data.forEach((item, index) => {
-        const key = `${item.whatsappNumber}_${item.timestamp}`;
         const timestamp = new Date(item.timestamp).getTime();
         
         // Check if we've seen a similar entry (same number, within 1 second)
@@ -433,9 +547,13 @@ function removeDuplicates() {
         }
     });
     
-    // Save cleaned data
+    // Save cleaned data back to file
     if (uniqueData.length !== data.length) {
-        localStorage.setItem('whatsappClickTracking', JSON.stringify(uniqueData));
+        // Load all data, replace WhatsApp clicks with cleaned ones
+        const allData = await loadAllDataFromFile();
+        const otherData = allData.filter(item => !(item.type === 'whatsapp' || (item.whatsappNumber && !item.name && !item.contact)));
+        const cleanedAllData = [...otherData, ...uniqueData];
+        await saveAllDataToFile(cleanedAllData);
         console.log(`Removed ${data.length - uniqueData.length} duplicate entries`);
     }
     
@@ -443,23 +561,30 @@ function removeDuplicates() {
 }
 
 // Function to download tracking data as JSON file
-function downloadTrackingData() {
-    const data = getClickTrackingData();
-    if (data.length === 0) {
-        console.log('No tracking data available');
-        return;
+async function downloadTrackingData() {
+    try {
+        const data = await getClickTrackingData();
+        if (data.length === 0) {
+            console.log('No tracking data available');
+            alert('No tracking data available');
+            return;
+        }
+        
+        const jsonString = JSON.stringify(data, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `whatsapp-clicks-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        console.log('Downloaded', data.length, 'WhatsApp click records');
+    } catch (error) {
+        console.error('Error downloading tracking data:', error);
+        alert('Error downloading data: ' + error.message);
     }
-    
-    const jsonString = JSON.stringify(data, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `whatsapp-clicks-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
 }
 
 // Function to attach click tracking to WhatsApp buttons
@@ -484,17 +609,13 @@ function attachWhatsAppTracking() {
                 const whatsappNumber = extractWhatsAppNumber(href);
                 
                 if (whatsappNumber) {
-                    try {
-                        // Save the click data (deduplication handled in saveClickTracking)
-                        const clickData = saveClickTracking(whatsappNumber);
-                        console.log('WhatsApp button clicked - Tracking saved:', clickData);
-                        
-                        // Verify it was saved
-                        const verifyData = getClickTrackingData();
-                        console.log(`Total clicks now: ${verifyData.length}`);
-                    } catch (error) {
+                    // Save the click data (deduplication handled in saveClickTracking)
+                    // Note: saveClickTracking is now async and saves to visitors.json
+                    saveClickTracking(whatsappNumber).then(clickData => {
+                        console.log('WhatsApp button clicked - Tracking saved to visitors.json:', clickData);
+                    }).catch(error => {
                         console.error('Error tracking WhatsApp click:', error);
-                    }
+                    });
                 } else {
                     console.warn('Could not extract WhatsApp number from:', href);
                 }
@@ -505,45 +626,63 @@ function attachWhatsAppTracking() {
     // Make download function available globally for admin use
     window.downloadWhatsAppTrackingData = downloadTrackingData;
     
-    // Store reference to original removeDuplicates function before shadowing
-    const originalRemoveDuplicates = removeDuplicates;
-    
     // Make remove duplicates function available globally
-    window.removeDuplicates = function() {
-        const before = getClickTrackingData().length;
-        const cleaned = originalRemoveDuplicates();
-        const after = cleaned.length;
-        const removed = before - after;
-        if (removed > 0) {
-            alert(`Removed ${removed} duplicate entries!`);
-            console.log(`Removed ${removed} duplicate entries`);
-        } else {
-            alert('No duplicates found!');
+    // Store reference to original function to avoid recursion
+    const originalRemoveDuplicates = removeDuplicates;
+    window.removeDuplicates = async function() {
+        try {
+            const before = (await getClickTrackingData()).length;
+            const cleaned = await originalRemoveDuplicates();
+            const after = cleaned.length;
+            const removed = before - after;
+            if (removed > 0) {
+                alert(`Removed ${removed} duplicate entries!`);
+                console.log(`Removed ${removed} duplicate entries`);
+            } else {
+                // alert('No duplicates found!');
+            }
+            return cleaned;
+        } catch (error) {
+            console.error('Error removing duplicates:', error);
+            alert('Error removing duplicates: ' + error.message);
         }
-        return cleaned;
     };
     
     // Make test function available for debugging
-    window.testWhatsAppTracking = function(whatsappNumber = '919112680201') {
+    window.testWhatsAppTracking = async function(whatsappNumber = '919112680201') {
         console.log('Testing WhatsApp tracking with number:', whatsappNumber);
-        const clickData = saveClickTracking(whatsappNumber);
-        console.log('Test click saved:', clickData);
-        const verifyData = getClickTrackingData();
-        console.log(`Total clicks now: ${verifyData.length}`);
-        alert(`Test click saved! Total clicks: ${verifyData.length}`);
-        return clickData;
+        try {
+            const clickData = await saveClickTracking(whatsappNumber);
+            console.log('Test click saved:', clickData);
+            const verifyData = await getClickTrackingData();
+            console.log(`Total clicks now: ${verifyData.length}`);
+            alert(`Test click saved! Total clicks: ${verifyData.length}`);
+            return clickData;
+        } catch (error) {
+            console.error('Test click failed:', error);
+            alert('Test click failed: ' + error.message);
+        }
     };
     
-    // Clean up any existing duplicates on initialization (use original function)
-    originalRemoveDuplicates();
+    // Clean up any existing duplicates on initialization (non-blocking)
+    setTimeout(() => {
+        removeDuplicates().catch(error => {
+            console.warn('Could not clean duplicates on init:', error);
+        });
+    }, 1000);
     
-    // Log current tracking data count (for debugging)
-    const currentData = getClickTrackingData();
-    if (currentData.length > 0) {
-        console.log(`WhatsApp clicks tracked: ${currentData.length}`);
-    } else {
-        console.log('No WhatsApp clicks tracked yet');
-    }
+    // Log current tracking data count (for debugging) - non-blocking
+    setTimeout(() => {
+        getClickTrackingData().then(currentData => {
+            if (currentData.length > 0) {
+                console.log(`WhatsApp clicks tracked: ${currentData.length}`);
+            } else {
+                console.log('No WhatsApp clicks tracked yet');
+            }
+        }).catch(error => {
+            console.log('Could not load click tracking data:', error);
+        });
+    }, 1000);
     
     // Log button info for debugging
     console.log('WhatsApp tracking initialized. Buttons found:', whatsappButtons.length);
@@ -1267,12 +1406,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Clear form
                 nameInput.value = '';
                 contactInput.value = '';
-            
-            // Hide modal
-            hideVisitorModal();
-            
-            // Show thank you message
-            alert('Thank you for your information! / आपल्या माहितीसाठी धन्यवाद!');
+                
+                // Hide modal
+                hideVisitorModal();
+                
+                // Show thank you message
+                alert('Thank you for your information! / आपल्या माहितीसाठी धन्यवाद!');
             } else {
                 alert('Error saving information. Please try again. / माहिती सेव्ह करताना त्रुटी. कृपया पुन्हा प्रयत्न करा.');
             }
