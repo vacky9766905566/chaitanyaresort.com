@@ -1,0 +1,12 @@
+# Protect JSON file from direct access (optional - remove if you want to access the file directly)
+<Files "visitors.json">
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Allow PHP to access the file
+<FilesMatch "\.php$">
+    Order allow,deny
+    Allow from all
+</FilesMatch>
+

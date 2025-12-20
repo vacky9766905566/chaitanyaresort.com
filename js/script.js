@@ -505,10 +505,13 @@ function attachWhatsAppTracking() {
     // Make download function available globally for admin use
     window.downloadWhatsAppTrackingData = downloadTrackingData;
     
+    // Store reference to original removeDuplicates function before shadowing
+    const originalRemoveDuplicates = removeDuplicates;
+    
     // Make remove duplicates function available globally
     window.removeDuplicates = function() {
         const before = getClickTrackingData().length;
-        const cleaned = removeDuplicates();
+        const cleaned = originalRemoveDuplicates();
         const after = cleaned.length;
         const removed = before - after;
         if (removed > 0) {
@@ -531,8 +534,8 @@ function attachWhatsAppTracking() {
         return clickData;
     };
     
-    // Clean up any existing duplicates on initialization
-    removeDuplicates();
+    // Clean up any existing duplicates on initialization (use original function)
+    originalRemoveDuplicates();
     
     // Log current tracking data count (for debugging)
     const currentData = getClickTrackingData();
@@ -621,8 +624,9 @@ function hideVisitorModal() {
     }
 }
 
-// Function to save visitor information
-function saveVisitorInfo(name, contact) {
+// Function to save visitor information - works with or without server
+async function saveVisitorInfo(name, contact) {
+    // Prepare visitor data
     const visitorData = {
         timestamp: new Date().toISOString(),
         name: name.trim(),
@@ -640,19 +644,103 @@ function saveVisitorInfo(name, contact) {
         })
     };
     
-    // Get existing visitor data
-    const stored = localStorage.getItem('visitorInfo');
-    const existingData = stored ? JSON.parse(stored) : [];
+    // Check if we're running from file:// protocol (no server)
+    const isLocalFile = window.location.protocol === 'file:';
     
-    // Add new visitor
-    existingData.push(visitorData);
+    if (isLocalFile) {
+        // Save to localStorage when running from file://
+        return saveToLocalStorage(visitorData);
+    }
     
-    // Save to localStorage
-    localStorage.setItem('visitorInfo', JSON.stringify(existingData));
-    
-    console.log('Visitor information saved:', visitorData);
-    return visitorData;
+    // Try to save to server when running from http:// or https://
+    try {
+        const response = await fetch('save-visitor.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(visitorData)
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            console.log('Visitor information saved to server:', visitorData);
+            console.log('Server response:', result);
+            console.log('Total visitors:', result.totalVisitors);
+            return visitorData;
+        } else {
+            console.error('Server error:', result.error);
+            throw new Error(result.error || 'Failed to save data');
+        }
+    } catch (error) {
+        console.error('Error saving visitor info to server, falling back to localStorage:', error);
+        // Fallback to localStorage if server request fails
+        return saveToLocalStorage(visitorData);
+    }
 }
+
+// Helper function to save to localStorage
+function saveToLocalStorage(visitorData) {
+    try {
+        if (typeof(Storage) !== "undefined" && localStorage) {
+            const stored = localStorage.getItem('visitorInfo');
+            const existingData = stored ? JSON.parse(stored) : [];
+            existingData.push(visitorData);
+            localStorage.setItem('visitorInfo', JSON.stringify(existingData));
+            console.log('Visitor information saved to localStorage:', visitorData);
+            console.log('Total visitors in localStorage:', existingData.length);
+            return visitorData;
+        } else {
+            console.error('localStorage is not available');
+            return null;
+        }
+    } catch (error) {
+        console.error('Error saving to localStorage:', error);
+        return null;
+    }
+}
+
+// Function to export/download visitor data as JSON file
+function downloadVisitorDataJSON() {
+    try {
+        const stored = localStorage.getItem('visitorInfo');
+        const data = stored ? JSON.parse(stored) : [];
+        
+        if (data.length === 0) {
+            alert('No visitor data to export. / निर्यात करण्यासाठी कोणतीही माहिती नाही.');
+            return;
+        }
+        
+        // Create JSON string with pretty formatting
+        const jsonString = JSON.stringify(data, null, 2);
+        
+        // Create blob and download
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'visitors.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        console.log('Visitor data exported:', data.length, 'entries');
+        alert(`Exported ${data.length} visitor entries to visitors.json / ${data.length} प्रवेश निर्यात केले`);
+    } catch (error) {
+        console.error('Error exporting visitor data:', error);
+        alert('Error exporting data. / डेटा निर्यात करताना त्रुटी.');
+    }
+}
+
+// Make download function available globally
+window.downloadVisitorDataJSON = downloadVisitorDataJSON;
 
 // Handle visitor form submission
 document.addEventListener('DOMContentLoaded', () => {
@@ -660,32 +748,90 @@ document.addEventListener('DOMContentLoaded', () => {
     const visitorModal = document.getElementById('visitorModal');
     
     if (visitorForm) {
+        // Handle form submission
         visitorForm.addEventListener('submit', function(e) {
             e.preventDefault();
+            e.stopPropagation();
             
-            const name = document.getElementById('visitorName').value.trim();
-            const contact = document.getElementById('visitorContact').value.trim();
-            
-            // Validate
-            if (!name || !contact) {
-                alert('Please fill in all fields / कृपया सर्व फील्ड भरा');
-                return;
-            }
-            
-            if (contact.length !== 10 || !/^\d+$/.test(contact)) {
-                alert('Please enter a valid 10-digit contact number / कृपया वैध 10-अंकी संपर्क क्रमांक प्रविष्ट करा');
-                return;
-            }
-            
-            // Save visitor information
-            saveVisitorInfo(name, contact);
-            
-            // Hide modal
-            hideVisitorModal();
-            
-            // Show thank you message
-            alert('Thank you for your information! / आपल्या माहितीसाठी धन्यवाद!');
+            handleFormSubmission();
         });
+        
+        // Also handle button click for mobile devices
+        const submitButton = visitorForm.querySelector('button[type="submit"]');
+        if (submitButton) {
+            submitButton.addEventListener('click', function(e) {
+                // Only handle if form validation passes
+                if (visitorForm.checkValidity()) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleFormSubmission();
+                }
+            });
+        }
+    }
+    
+    async function handleFormSubmission() {
+        const nameInput = document.getElementById('visitorName');
+        const contactInput = document.getElementById('visitorContact');
+        const submitButton = visitorForm.querySelector('button[type="submit"]');
+        
+        if (!nameInput || !contactInput) {
+            console.error('Form inputs not found');
+            alert('Error: Form inputs not found / त्रुटी: फॉर्म इनपुट सापडले नाहीत');
+            return;
+        }
+        
+        const name = nameInput.value.trim();
+        const contact = contactInput.value.trim();
+        
+        // Validate
+        if (!name || !contact) {
+            alert('Please fill in all fields / कृपया सर्व फील्ड भरा');
+            nameInput.focus();
+            return;
+        }
+        
+        if (contact.length !== 10 || !/^\d+$/.test(contact)) {
+            alert('Please enter a valid 10-digit contact number / कृपया वैध 10-अंकी संपर्क क्रमांक प्रविष्ट करा');
+            contactInput.focus();
+            return;
+        }
+        
+        // Disable submit button to prevent double submission
+        if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.textContent = 'Saving... / सेव्ह करत आहे...';
+        }
+        
+        try {
+            // Save visitor information (async)
+            const saved = await saveVisitorInfo(name, contact);
+            
+            if (saved) {
+                // Clear form
+                nameInput.value = '';
+                contactInput.value = '';
+                
+                // Hide modal
+                hideVisitorModal();
+                
+                // Show thank you message
+                alert('Thank you for your information! / आपल्या माहितीसाठी धन्यवाद!');
+            } else {
+                alert('Error saving information. Please try again. / माहिती सेव्ह करताना त्रुटी. कृपया पुन्हा प्रयत्न करा.');
+            }
+        } catch (error) {
+            console.error('Error in form submission:', error);
+            // Show user-friendly error message
+            const errorMessage = error.message || 'Error saving information. Please try again. / माहिती सेव्ह करताना त्रुटी. कृपया पुन्हा प्रयत्न करा.';
+            alert(errorMessage);
+        } finally {
+            // Re-enable submit button
+            if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.textContent = 'Submit / सबमिट करा';
+            }
+        }
     }
     
     // Show modal after a short delay (1 second) on page load
