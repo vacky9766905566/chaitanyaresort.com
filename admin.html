@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Click Tracking - Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 30px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2rem;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-card h3 {
+            font-size: 2.5rem;
+            margin-bottom: 5px;
+        }
+        
+        .stat-card p {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
+        .actions {
+            margin-bottom: 30px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #218838;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(40, 167, 69, 0.4);
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(220, 53, 69, 0.4);
+        }
+        
+        .table-container {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+            position: sticky;
+            top: 0;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .whatsapp-number {
+            font-weight: 600;
+            color: #25D366;
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        
+        .no-data i {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            display: block;
+        }
+        
+        .filter-section {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .filter-section select, .filter-section input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            h1 {
+                font-size: 1.5rem;
+            }
+            
+            .stats {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <h1><i class="fab fa-whatsapp"></i> WhatsApp Click Tracking</h1>
+        <p class="subtitle">View and manage WhatsApp button click analytics</p>
+        
+        <div class="stats" id="stats">
+            <div class="stat-card">
+                <h3 id="totalClicks">0</h3>
+                <p>Total Clicks</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="uniqueNumbers">0</h3>
+                <p>Unique Numbers</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="todayClicks">0</h3>
+                <p>Clicks Today</p>
+            </div>
+        </div>
+        
+        <div class="actions">
+            <button class="btn btn-primary" onclick="downloadData()">
+                <i class="fas fa-download"></i> Download JSON
+            </button>
+            <button class="btn btn-secondary" onclick="refreshData()">
+                <i class="fas fa-sync"></i> Refresh
+            </button>
+            <button class="btn btn-secondary" onclick="testTracking()" style="background: #17a2b8;">
+                <i class="fas fa-vial"></i> Test Tracking
+            </button>
+            <button class="btn btn-secondary" onclick="removeDuplicates()" style="background: #ffc107; color: #000;">
+                <i class="fas fa-filter"></i> Remove Duplicates
+            </button>
+            <button class="btn btn-danger" onclick="clearData()">
+                <i class="fas fa-trash"></i> Clear All Data
+            </button>
+        </div>
+        
+        <div class="filter-section">
+            <label>Filter by Number:</label>
+            <select id="numberFilter" onchange="filterData()">
+                <option value="">All Numbers</option>
+            </select>
+            <label>Filter by Date:</label>
+            <input type="date" id="dateFilter" onchange="filterData()">
+            <button class="btn btn-secondary" onclick="clearFilters()" style="padding: 8px 16px; font-size: 0.9rem;">
+                Clear Filters
+            </button>
+        </div>
+        
+        <div class="table-container">
+            <table id="dataTable">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>WhatsApp Number</th>
+                        <th>Full Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr>
+                        <td colspan="5" class="no-data">
+                            <i class="fas fa-inbox"></i>
+                            <p>No tracking data available</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <script>
+        let allData = [];
+        let filteredData = [];
+        
+        // Load data from localStorage
+        function loadData() {
+            const stored = localStorage.getItem('whatsappClickTracking');
+            allData = stored ? JSON.parse(stored) : [];
+            filteredData = [...allData];
+            updateStats();
+            updateTable();
+            updateFilters();
+        }
+        
+        // Update statistics
+        function updateStats() {
+            const totalClicks = allData.length;
+            const uniqueNumbers = new Set(allData.map(item => item.whatsappNumber)).size;
+            const today = new Date().toISOString().split('T')[0];
+            const todayClicks = allData.filter(item => item.timestamp.startsWith(today)).length;
+            
+            document.getElementById('totalClicks').textContent = totalClicks;
+            document.getElementById('uniqueNumbers').textContent = uniqueNumbers;
+            document.getElementById('todayClicks').textContent = todayClicks;
+        }
+        
+        // Update table
+        function updateTable() {
+            const tbody = document.getElementById('tableBody');
+            
+            if (filteredData.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="no-data">
+                            <i class="fas fa-inbox"></i>
+                            <p>No tracking data available</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            // Sort by timestamp (newest first)
+            const sortedData = [...filteredData].sort((a, b) => 
+                new Date(b.timestamp) - new Date(a.timestamp)
+            );
+            
+            tbody.innerHTML = sortedData.map((item, index) => `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${item.date || 'N/A'}</td>
+                    <td>${item.time || 'N/A'}</td>
+                    <td class="whatsapp-number">+${item.whatsappNumber}</td>
+                    <td>${new Date(item.timestamp).toLocaleString()}</td>
+                </tr>
+            `).join('');
+        }
+        
+        // Update filter dropdown
+        function updateFilters() {
+            const uniqueNumbers = [...new Set(allData.map(item => item.whatsappNumber))].sort();
+            const select = document.getElementById('numberFilter');
+            
+            // Clear existing options except "All Numbers"
+            select.innerHTML = '<option value="">All Numbers</option>';
+            
+            uniqueNumbers.forEach(num => {
+                const option = document.createElement('option');
+                option.value = num;
+                option.textContent = `+${num}`;
+                select.appendChild(option);
+            });
+        }
+        
+        // Filter data
+        function filterData() {
+            const numberFilter = document.getElementById('numberFilter').value;
+            const dateFilter = document.getElementById('dateFilter').value;
+            
+            filteredData = allData.filter(item => {
+                const matchesNumber = !numberFilter || item.whatsappNumber === numberFilter;
+                const matchesDate = !dateFilter || item.timestamp.startsWith(dateFilter);
+                return matchesNumber && matchesDate;
+            });
+            
+            updateTable();
+        }
+        
+        // Clear filters
+        function clearFilters() {
+            document.getElementById('numberFilter').value = '';
+            document.getElementById('dateFilter').value = '';
+            filteredData = [...allData];
+            updateTable();
+        }
+        
+        // Download data as JSON
+        function downloadData() {
+            if (allData.length === 0) {
+                alert('No data to download');
+                return;
+            }
+            
+            const jsonString = JSON.stringify(allData, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `whatsapp-clicks-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+        
+        // Refresh data
+        function refreshData() {
+            loadData();
+            alert('Data refreshed!');
+        }
+        
+        // Clear all data
+        function clearData() {
+            if (confirm('Are you sure you want to clear all tracking data? This action cannot be undone.')) {
+                localStorage.removeItem('whatsappClickTracking');
+                allData = [];
+                filteredData = [];
+                updateStats();
+                updateTable();
+                updateFilters();
+                alert('All data cleared!');
+            }
+        }
+        
+        // Test tracking function
+        function testTracking() {
+            // Create a test click entry
+            const testData = {
+                timestamp: new Date().toISOString(),
+                whatsappNumber: '919112680201',
+                date: new Date().toLocaleDateString('en-IN', { 
+                    year: 'numeric', 
+                    month: '2-digit', 
+                    day: '2-digit' 
+                }),
+                time: new Date().toLocaleTimeString('en-IN', { 
+                    hour: '2-digit', 
+                    minute: '2-digit', 
+                    second: '2-digit',
+                    hour12: false 
+                })
+            };
+            
+            const existingData = allData;
+            existingData.push(testData);
+            localStorage.setItem('whatsappClickTracking', JSON.stringify(existingData));
+            
+            loadData();
+            alert('Test click added! Check the table below.');
+        }
+        
+        // Remove duplicates function
+        function removeDuplicates() {
+            const data = allData;
+            if (data.length === 0) {
+                alert('No data to clean!');
+                return;
+            }
+            
+            // Remove duplicates: same number and timestamp within 1 second
+            const uniqueData = [];
+            
+            data.forEach((item) => {
+                const timestamp = new Date(item.timestamp).getTime();
+                
+                // Check if we've seen a similar entry (same number, within 1 second)
+                let isDuplicate = false;
+                for (let i = 0; i < uniqueData.length; i++) {
+                    const existing = uniqueData[i];
+                    if (existing.whatsappNumber === item.whatsappNumber) {
+                        const existingTime = new Date(existing.timestamp).getTime();
+                        if (Math.abs(timestamp - existingTime) < 1000) {
+                            isDuplicate = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (!isDuplicate) {
+                    uniqueData.push(item);
+                }
+            });
+            
+            const removed = data.length - uniqueData.length;
+            
+            if (removed > 0) {
+                localStorage.setItem('whatsappClickTracking', JSON.stringify(uniqueData));
+                loadData();
+                alert(`Removed ${removed} duplicate entries!`);
+            } else {
+                alert('No duplicates found!');
+            }
+        }
+        
+        // Load data on page load
+        loadData();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(loadData, 30000);
+    </script>
+</body>
+</html>
+
