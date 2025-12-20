@@ -347,6 +347,10 @@ async function saveClickTracking(whatsappNumber) {
         return recentClicks.get(clickKey);
     }
     
+    // Check if visitor info is available from the welcome popup form
+    const visitorName = sessionStorage.getItem('visitorName');
+    const visitorContact = sessionStorage.getItem('visitorContact');
+    
     const clickData = {
         timestamp: new Date().toISOString(),
         whatsappNumber: whatsappNumber,
@@ -362,8 +366,8 @@ async function saveClickTracking(whatsappNumber) {
             second: '2-digit',
             hour12: false 
         }),
-        name: null, // WhatsApp clicks don't have name
-        contact: null // WhatsApp clicks don't have contact
+        name: visitorName || null, // Include visitor name if available
+        contact: visitorContact || null // Include visitor contact if available
     };
     
     // Get existing data from file
@@ -803,6 +807,12 @@ async function saveVisitorInfo(name, contact) {
             console.log('✓ Visitor information saved to database:', visitorData);
             console.log('Server response:', result);
             console.log('Total visitors:', result.totalVisitors);
+            
+            // Store visitor info in sessionStorage for WhatsApp click tracking
+            sessionStorage.setItem('visitorName', name);
+            sessionStorage.setItem('visitorContact', contact);
+            sessionStorage.setItem('visitorTimestamp', visitorData.timestamp);
+            
             return visitorData;
         } else {
             console.error('Server error:', result.error);

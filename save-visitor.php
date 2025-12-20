@@ -36,10 +36,14 @@ if ($isWhatsApp) {
         exit;
     }
     
+    // Get visitor info if available (from welcome popup form)
+    $visitorName = isset($data['name']) ? trim($data['name']) : null;
+    $visitorContact = isset($data['contact']) ? trim($data['contact']) : null;
+    
     $visitorData = [
         'timestamp' => $data['timestamp'] ?? date('c'),
-        'name' => null,
-        'contact' => null,
+        'name' => $visitorName,
+        'contact' => $visitorContact,
         'whatsapp_number' => $whatsappNumber,
         'type' => 'whatsapp',
         'date' => $data['date'] ?? date('d/m/Y'),
