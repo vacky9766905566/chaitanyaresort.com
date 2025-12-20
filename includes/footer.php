@@ -24,10 +24,10 @@
                 <div class="footer-section">
                     <h4>संपर्क माहिती</h4>
                     <p><i class="fas fa-map-marker-alt"></i> चैतन्य रिसॉर्ट, पालंदे बीच, दापोली-हरनाई रोड, रत्नागिरी जिल्हा, महाराष्ट्र.</p>
-                    <p><i class="fas fa-phone"></i> +91-9112680201</p>
+                    <!-- <p><i class="fas fa-phone"></i> +91-9112680201</p>
                     <p><i class="fas fa-phone"></i> +91-9421297851</p>
                     <p><i class="fas fa-phone"></i> +91-7768962339</p>
-                    <p><i class="fas fa-phone"></i> +91-8390347209</p>
+                    <p><i class="fas fa-phone"></i> +91-8390347209</p> -->
                     <p><i class="fas fa-envelope"></i> info@chaitanyaresort.com</p>
                 </div>
             </div>
@@ -90,9 +90,23 @@
                     <input type="tel" id="visitorContact" name="contact" required placeholder="Enter your contact number" pattern="[0-9]{10}" minlength="10" maxlength="10" autocomplete="tel" inputmode="numeric">
                 </div>
                 <div class="form-actions">
-                    <button type="submit" class="btn btn-primary">Submit / सबमिट करा</button>
+                    <button type="submit" class="btn btn-primary" id="visitorSubmitBtn">
+                        <span class="btn-text">Submit / सबमिट करा</span>
+                        <span class="spinner" id="visitorSpinner" style="display: none;">
+                            <i class="fas fa-spinner fa-spin"></i>
+                        </span>
+                    </button>
                 </div>
             </form>
+        </div>
+    </div>
+    
+    <!-- Global Loading Spinner -->
+    <div id="globalSpinner" class="global-spinner" style="display: none;">
+        <div class="spinner-overlay"></div>
+        <div class="spinner-content">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Saving... / सेव्ह करत आहे...</p>
         </div>
     </div>
 

@@ -394,7 +394,7 @@ async function saveClickTracking(whatsappNumber) {
     // Add new click to all data
     allData.push(clickData);
     
-    // Save to database via PHP endpoint
+    // Save to database via PHP endpoint (no spinner for WhatsApp clicks)
     try {
         const response = await fetch('save-visitor.php', {
             method: 'POST',
@@ -1378,10 +1378,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             
-        // Disable submit button to prevent double submission
-        if (submitButton) {
-            submitButton.disabled = true;
-            submitButton.textContent = 'Saving... / सेव्ह करत आहे...';
+        // Show spinner and disable submit button
+        const submitBtn = document.getElementById('visitorSubmitBtn');
+        const spinner = document.getElementById('visitorSpinner');
+        const btnText = submitBtn ? submitBtn.querySelector('.btn-text') : null;
+        const globalSpinner = document.getElementById('globalSpinner');
+        
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.classList.add('loading');
+        }
+        if (spinner) {
+            spinner.style.display = 'inline-block';
+        }
+        if (globalSpinner) {
+            globalSpinner.style.display = 'flex';
         }
         
         try {
@@ -1407,10 +1418,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const errorMessage = error.message || 'Error saving information. Please try again. / माहिती सेव्ह करताना त्रुटी. कृपया पुन्हा प्रयत्न करा.';
             alert(errorMessage);
         } finally {
-            // Re-enable submit button
-            if (submitButton) {
-                submitButton.disabled = false;
-                submitButton.textContent = 'Submit / सबमिट करा';
+            // Hide spinner and re-enable submit button
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('loading');
+            }
+            if (spinner) {
+                spinner.style.display = 'none';
+            }
+            if (globalSpinner) {
+                globalSpinner.style.display = 'none';
             }
         }
     }
