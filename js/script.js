@@ -390,8 +390,29 @@ async function saveClickTracking(whatsappNumber) {
     // Add new click to all data
     allData.push(clickData);
     
-    // Save to visitors.json file
-    await saveAllDataToFile(allData);
+    // Save to database via PHP endpoint
+    try {
+        const response = await fetch('save-visitor.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(clickData)
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                console.log('✓ WhatsApp click saved to database:', clickData);
+            } else {
+                console.error('Failed to save WhatsApp click to database:', result.error);
+            }
+        } else {
+            console.error('HTTP error saving WhatsApp click:', response.status);
+        }
+    } catch (error) {
+        console.error('Error saving WhatsApp click to database:', error);
+    }
     
     // Store in recent clicks map
     recentClicks.set(clickKey, clickData);
@@ -401,58 +422,32 @@ async function saveClickTracking(whatsappNumber) {
         recentClicks.delete(clickKey);
     }, 5000);
     
-    console.log('✓ WhatsApp click saved to visitors.json');
     return clickData;
 }
 
-// Load all data (visitor info + WhatsApp clicks) from visitors.json
+// Load all data (visitor info + WhatsApp clicks) from database
 async function loadAllDataFromFile() {
-    const isLocalFile = window.location.protocol === 'file:';
-    
-    if (isLocalFile) {
-        // For file://, try to load from visitors.js (loaded via script tag)
-        if (window.visitorsData && Array.isArray(window.visitorsData)) {
-            return window.visitorsData;
+    // Fetch from database via PHP endpoint
+    try {
+        const response = await fetch('get-visitors.php');
+        if (response.ok) {
+            const data = await response.json();
+            return Array.isArray(data) ? data : [];
+        } else {
+            console.warn('Failed to load from database. HTTP status:', response.status);
         }
-        
-        // Try to load via script tag
-        try {
-            await loadVisitorsJS();
-            if (window.visitorsData && Array.isArray(window.visitorsData)) {
-                return window.visitorsData;
-            }
-        } catch (error) {
-            console.warn('Could not load visitors.js:', error);
-        }
-        
-        return [];
-    } else {
-        // For http://, try to fetch from server
-        try {
-            const response = await fetch('get-visitors.php');
-            if (response.ok) {
-                const data = await response.json();
-                return Array.isArray(data) ? data : [];
-            }
-        } catch (error) {
-            console.warn('Could not load from server:', error);
-        }
-        return [];
+    } catch (error) {
+        console.warn('Could not load from database:', error);
     }
+    return [];
 }
 
-// Save all data (visitor info + WhatsApp clicks) to visitors.json
+// NOTE: This function is no longer used - all data is saved to database via PHP endpoints
+// Keeping function stub for backward compatibility
 async function saveAllDataToFile(allData) {
-    const isLocalFile = window.location.protocol === 'file:';
-    
-    if (isLocalFile) {
-        // Use File System Access API to save directly
-        await saveDataArrayToFile(allData);
-    } else {
-        // For http://, save via server (only visitor form data goes through server)
-        // WhatsApp clicks will be saved when visitor form is submitted
-        // For now, we'll handle it in the file:// case
-    }
+    // No longer needed - data is saved to database via save-visitor.php
+    console.log('saveAllDataToFile: No longer saving to files - data goes to database');
+    return;
 }
 
 // Save data array to file using File System Access API
@@ -763,7 +758,7 @@ function hideVisitorModal() {
     }
 }
 
-// Function to save visitor information - always tries server first
+// Function to save visitor information to database
 async function saveVisitorInfo(name, contact) {
     console.log('saveVisitorInfo called with:', { name, contact });
     
@@ -787,26 +782,7 @@ async function saveVisitorInfo(name, contact) {
     
     console.log('Prepared visitor data:', visitorData);
     
-    // Check if we're running from file:// protocol
-    const isLocalFile = window.location.protocol === 'file:';
-    console.log('Protocol check - isLocalFile:', isLocalFile, 'protocol:', window.location.protocol);
-    
-    if (isLocalFile) {
-        // For file:// protocol, save directly to visitors.json file
-        console.log('Running from file:// protocol. Saving directly to visitors.json file.');
-        
-        // Save directly to file using File System Access API
-        try {
-            await saveDirectlyToFile(visitorData);
-            console.log('✓ Data saved directly to visitors.json file');
-            return visitorData;
-        } catch (error) {
-            console.error('Failed to save to file:', error);
-            throw new Error('Failed to save data. Please grant folder permission when prompted.');
-        }
-    }
-    
-    // For http:// or https://, try to save to server
+    // Save to database via PHP endpoint
     try {
         const response = await fetch('save-visitor.php', {
             method: 'POST',
@@ -824,7 +800,7 @@ async function saveVisitorInfo(name, contact) {
         const result = await response.json();
         
         if (result.success) {
-            console.log('✓ Visitor information saved to server:', visitorData);
+            console.log('✓ Visitor information saved to database:', visitorData);
             console.log('Server response:', result);
             console.log('Total visitors:', result.totalVisitors);
             return visitorData;
@@ -833,7 +809,7 @@ async function saveVisitorInfo(name, contact) {
             throw new Error(result.error || 'Failed to save data');
         }
     } catch (error) {
-        console.error('Error saving visitor info to server:', error);
+        console.error('Error saving visitor info to database:', error);
         throw error;
     }
 }

@@ -1,7 +1,0 @@
-# Allow read access to JSON file for admin panel
-# PHP can write to it, but it can also be read via fetch
-<Files "visitors.json">
-    Order allow,deny
-    Allow from all
-</Files>
-

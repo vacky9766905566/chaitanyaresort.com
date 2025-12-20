@@ -1,0 +1,22 @@
+# Redirect index.html to index.php
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+    
+    # Redirect index.html to index.php
+    RewriteCond %{THE_REQUEST} /index\.html [NC]
+    RewriteRule ^index\.html$ /index.php [R=301,L]
+    
+    # Remove .php extension from URLs (optional)
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME}\.php -f
+    RewriteRule ^(.*)\.php$ /$1 [R=301,L]
+</IfModule>
+
+# Set default index file
+DirectoryIndex index.php index.html
+
+# Enable PHP error reporting (disable in production)
+# php_flag display_errors On
+# php_value error_reporting E_ALL
+

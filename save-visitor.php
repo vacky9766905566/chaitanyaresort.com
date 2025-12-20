@@ -1,4 +1,6 @@
 <?php
+require_once 'config.php';
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
@@ -15,96 +17,110 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $json = file_get_contents('php://input');
 $data = json_decode($json, true);
 
-// Validate input
-if (!isset($data['name']) || !isset($data['contact'])) {
+if ($data === null) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Missing required fields']);
+    echo json_encode(['success' => false, 'error' => 'Invalid JSON data']);
     exit;
 }
 
-// Sanitize input
-$name = trim($data['name']);
-$contact = trim($data['contact']);
+// Determine if this is a WhatsApp click or regular visitor
+$isWhatsApp = isset($data['type']) && $data['type'] === 'whatsapp' && isset($data['whatsappNumber']);
 
-// Validate contact number (10 digits)
-if (strlen($contact) !== 10 || !preg_match('/^\d+$/', $contact)) {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Invalid contact number']);
-    exit;
-}
-
-// Prepare visitor data
-$visitorData = [
-    'timestamp' => $data['timestamp'] ?? date('c'),
-    'name' => $name,
-    'contact' => $contact,
-    'date' => $data['date'] ?? date('d/m/Y'),
-    'time' => $data['time'] ?? date('H:i:s')
-];
-
-// JSON file path
-$jsonFile = 'data/visitors.json';
-
-// Create data directory if it doesn't exist
-$dataDir = dirname($jsonFile);
-if (!is_dir($dataDir)) {
-    if (!mkdir($dataDir, 0755, true)) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Failed to create data directory']);
+if ($isWhatsApp) {
+    // Handle WhatsApp click tracking
+    $whatsappNumber = trim($data['whatsappNumber']);
+    
+    if (empty($whatsappNumber)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'WhatsApp number is required']);
         exit;
     }
-}
-
-// Read existing data
-$existingData = [];
-if (file_exists($jsonFile)) {
-    $fileContent = file_get_contents($jsonFile);
-    if ($fileContent !== false) {
-        $existingData = json_decode($fileContent, true);
-        if (!is_array($existingData)) {
-            $existingData = [];
-        }
+    
+    $visitorData = [
+        'timestamp' => $data['timestamp'] ?? date('c'),
+        'name' => null,
+        'contact' => null,
+        'whatsapp_number' => $whatsappNumber,
+        'type' => 'whatsapp',
+        'date' => $data['date'] ?? date('d/m/Y'),
+        'time' => $data['time'] ?? date('H:i:s')
+    ];
+} else {
+    // Handle regular visitor
+    if (!isset($data['name']) || !isset($data['contact'])) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Missing required fields: name and contact']);
+        exit;
     }
+    
+    // Sanitize input
+    $name = trim($data['name']);
+    $contact = trim($data['contact']);
+    
+    // Validate contact number (10 digits)
+    if (strlen($contact) !== 10 || !preg_match('/^\d+$/', $contact)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Invalid contact number. Must be 10 digits']);
+        exit;
+    }
+    
+    $visitorData = [
+        'timestamp' => $data['timestamp'] ?? date('c'),
+        'name' => $name,
+        'contact' => $contact,
+        'whatsapp_number' => null,
+        'type' => 'visitor',
+        'date' => $data['date'] ?? date('d/m/Y'),
+        'time' => $data['time'] ?? date('H:i:s')
+    ];
 }
 
-// Add new visitor
-$existingData[] = $visitorData;
+// Get database connection
+$pdo = getDBConnection();
 
-// Save to JSON file
-$jsonData = json_encode($existingData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-$writeResult = file_put_contents($jsonFile, $jsonData, LOCK_EX);
-
-if ($writeResult === false) {
+if (!$pdo) {
     http_response_code(500);
-    $error = 'Failed to save data to ' . $jsonFile;
-    // Check if directory is writable
-    if (!is_writable(dirname($jsonFile))) {
-        $error .= ' - Directory is not writable';
-    } elseif (file_exists($jsonFile) && !is_writable($jsonFile)) {
-        $error .= ' - File is not writable';
-    }
-    error_log('Save visitor error: ' . $error);
-    echo json_encode(['success' => false, 'error' => $error]);
+    echo json_encode(['success' => false, 'error' => 'Database connection failed']);
     exit;
 }
 
-// Also update visitors.js file for file:// protocol support
-$jsFile = 'data/visitors.js';
-$jsContent = "// Auto-generated JavaScript file from visitors.json\n";
-$jsContent .= "// This file is updated automatically when visitors.json changes\n";
-$jsContent .= "window.visitorsData = " . json_encode($existingData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . ";\n";
-$jsWriteResult = file_put_contents($jsFile, $jsContent, LOCK_EX);
-
-if ($jsWriteResult === false) {
-    // Log warning but don't fail the request
-    error_log('Warning: Failed to update visitors.js file');
+try {
+    // Insert visitor data into database
+    $stmt = $pdo->prepare("
+        INSERT INTO visitors (timestamp, name, contact, whatsapp_number, type, date, time)
+        VALUES (:timestamp, :name, :contact, :whatsapp_number, :type, :date, :time)
+    ");
+    
+    $stmt->execute([
+        ':timestamp' => $visitorData['timestamp'],
+        ':name' => $visitorData['name'],
+        ':contact' => $visitorData['contact'],
+        ':whatsapp_number' => $visitorData['whatsapp_number'],
+        ':type' => $visitorData['type'],
+        ':date' => $visitorData['date'],
+        ':time' => $visitorData['time']
+    ]);
+    
+    // Get total count
+    $countStmt = $pdo->query("SELECT COUNT(*) as total FROM visitors");
+    $totalResult = $countStmt->fetch();
+    $totalVisitors = $totalResult['total'];
+    
+    // Return success response
+    echo json_encode([
+        'success' => true,
+        'message' => $isWhatsApp ? 'WhatsApp click tracked successfully' : 'Visitor information saved successfully',
+        'totalVisitors' => (int)$totalVisitors,
+        'id' => $pdo->lastInsertId()
+    ]);
+    
+} catch (PDOException $e) {
+    error_log('Database error in save-visitor.php: ' . $e->getMessage());
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'error' => 'Failed to save data to database'
+    ]);
 }
-
-// Return success response
-echo json_encode([
-    'success' => true,
-    'message' => 'Visitor information saved successfully',
-    'totalVisitors' => count($existingData)
-]);
 ?>
 
