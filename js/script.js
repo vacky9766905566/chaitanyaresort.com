@@ -624,8 +624,10 @@ function hideVisitorModal() {
     }
 }
 
-// Function to save visitor information - works with or without server
+// Function to save visitor information - always tries server first
 async function saveVisitorInfo(name, contact) {
+    console.log('saveVisitorInfo called with:', { name, contact });
+    
     // Prepare visitor data
     const visitorData = {
         timestamp: new Date().toISOString(),
@@ -644,15 +646,28 @@ async function saveVisitorInfo(name, contact) {
         })
     };
     
-    // Check if we're running from file:// protocol (no server)
+    console.log('Prepared visitor data:', visitorData);
+    
+    // Check if we're running from file:// protocol
     const isLocalFile = window.location.protocol === 'file:';
+    console.log('Protocol check - isLocalFile:', isLocalFile, 'protocol:', window.location.protocol);
     
     if (isLocalFile) {
-        // Save to localStorage when running from file://
-        return saveToLocalStorage(visitorData);
+        // For file:// protocol, save directly to visitors.json file
+        console.log('Running from file:// protocol. Saving directly to visitors.json file.');
+        
+        // Save directly to file using File System Access API
+        try {
+            await saveDirectlyToFile(visitorData);
+            console.log('✓ Data saved directly to visitors.json file');
+            return visitorData;
+        } catch (error) {
+            console.error('Failed to save to file:', error);
+            throw new Error('Failed to save data. Please grant folder permission when prompted.');
+        }
     }
     
-    // Try to save to server when running from http:// or https://
+    // For http:// or https://, try to save to server
     try {
         const response = await fetch('save-visitor.php', {
             method: 'POST',
@@ -670,7 +685,7 @@ async function saveVisitorInfo(name, contact) {
         const result = await response.json();
         
         if (result.success) {
-            console.log('Visitor information saved to server:', visitorData);
+            console.log('✓ Visitor information saved to server:', visitorData);
             console.log('Server response:', result);
             console.log('Total visitors:', result.totalVisitors);
             return visitorData;
@@ -679,29 +694,416 @@ async function saveVisitorInfo(name, contact) {
             throw new Error(result.error || 'Failed to save data');
         }
     } catch (error) {
-        console.error('Error saving visitor info to server, falling back to localStorage:', error);
-        // Fallback to localStorage if server request fails
-        return saveToLocalStorage(visitorData);
+        console.error('Error saving visitor info to server:', error);
+        throw error;
     }
 }
 
-// Helper function to save to localStorage
+// Save directly to visitors.json file (no localStorage)
+async function saveDirectlyToFile(visitorData) {
+    // Try to use File System Access API
+    if (!('showDirectoryPicker' in window)) {
+        throw new Error('File System Access API not supported. Please use Chrome or Edge browser.');
+    }
+    
+    try {
+        // Check if we have permission stored in IndexedDB
+        let dataDirHandle = await getStoredDirectoryHandle();
+        
+        // Validate the handle is still valid
+        if (dataDirHandle) {
+            try {
+                // Test if handle is valid by trying to get a file
+                await dataDirHandle.getFileHandle('visitors.json', { create: false }).catch(() => {});
+                console.log('Using stored directory handle');
+            } catch (error) {
+                console.log('Stored handle is invalid, requesting new one');
+                dataDirHandle = null;
+                // Clear invalid handle
+                await clearStoredDirectoryHandle();
+            }
+        }
+        
+        if (!dataDirHandle) {
+            // Request directory permission (one-time only)
+            const userConfirmed = confirm(
+                'To save data to files, please select the "data" folder.\n\n' +
+                'This is a one-time permission. After this, all data will be saved automatically.\n\n' +
+                'Navigate to: C:\\Project\\chaitanyaresort.com\\data'
+            );
+            
+            if (!userConfirmed) {
+                throw new Error('User cancelled directory selection');
+            }
+            
+            dataDirHandle = await window.showDirectoryPicker();
+            // Store handle in IndexedDB for persistence
+            await storeDirectoryHandle(dataDirHandle);
+            console.log('✓ Directory permission granted and stored');
+        }
+        
+        // Verify handle has getFileHandle method
+        if (typeof dataDirHandle.getFileHandle !== 'function') {
+            console.error('Invalid directory handle, requesting new one');
+            dataDirHandle = await window.showDirectoryPicker();
+            await storeDirectoryHandle(dataDirHandle);
+        }
+        
+        // Read existing data from visitors.json
+        let existingData = [];
+        try {
+            const jsonFileHandle = await dataDirHandle.getFileHandle('visitors.json', { create: true });
+            const file = await jsonFileHandle.getFile();
+            const fileContent = await file.text();
+            if (fileContent.trim()) {
+                existingData = JSON.parse(fileContent);
+                console.log('Loaded', existingData.length, 'existing records from visitors.json');
+            }
+        } catch (error) {
+            console.log('visitors.json not found or empty, starting fresh:', error);
+            existingData = [];
+        }
+        
+        // Add new visitor data
+        existingData.push(visitorData);
+        console.log('Total records after adding new:', existingData.length);
+        
+        // Create JSON content
+        const jsonContent = JSON.stringify(existingData, null, 2);
+        
+        // Create JavaScript content
+        const jsContent = `// Auto-generated JavaScript file from visitors.json
+// This file is updated automatically when visitors.json changes
+window.visitorsData = ${JSON.stringify(existingData, null, 2)};
+`;
+        
+        // Write visitors.json
+        const jsonFileHandle = await dataDirHandle.getFileHandle('visitors.json', { create: true });
+        const jsonWritable = await jsonFileHandle.createWritable();
+        await jsonWritable.write(jsonContent);
+        await jsonWritable.close();
+        console.log('✓ visitors.json updated');
+        
+        // Write visitors.js
+        const jsFileHandle = await dataDirHandle.getFileHandle('visitors.js', { create: true });
+        const jsWritable = await jsFileHandle.createWritable();
+        await jsWritable.write(jsContent);
+        await jsWritable.close();
+        console.log('✓ visitors.js updated');
+        
+        return true;
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            console.log('Directory permission cancelled');
+            throw new Error('File save cancelled. Please try again and select the data folder.');
+        } else {
+            console.error('File save error:', error);
+            throw error;
+        }
+    }
+}
+
+// Store directory handle in IndexedDB for persistence
+async function storeDirectoryHandle(handle) {
+    try {
+        const db = await openDB();
+        const tx = db.transaction('handles', 'readwrite');
+        const store = tx.objectStore('handles');
+        // Store handle (IndexedDB can store FileSystemDirectoryHandle)
+        await store.put(handle, 'dataDir');
+        await tx.complete;
+        console.log('Directory handle stored');
+    } catch (error) {
+        console.warn('Could not store directory handle:', error);
+    }
+}
+
+// Get stored directory handle from IndexedDB
+async function getStoredDirectoryHandle() {
+    try {
+        const db = await openDB();
+        const tx = db.transaction('handles', 'readonly');
+        const store = tx.objectStore('handles');
+        const handle = await store.get('dataDir');
+        
+        // Verify handle is valid
+        if (handle && typeof handle.getFileHandle === 'function') {
+            return handle;
+        }
+        
+        return null;
+    } catch (error) {
+        console.warn('Could not get stored directory handle:', error);
+        return null;
+    }
+}
+
+// Clear stored directory handle
+async function clearStoredDirectoryHandle() {
+    try {
+        const db = await openDB();
+        const tx = db.transaction('handles', 'readwrite');
+        const store = tx.objectStore('handles');
+        await store.delete('dataDir');
+        await tx.complete;
+        console.log('Cleared invalid directory handle');
+    } catch (error) {
+        console.warn('Could not clear directory handle:', error);
+    }
+}
+
+// Open IndexedDB database
+function openDB() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open('visitorDataDB', 1);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result);
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains('handles')) {
+                db.createObjectStore('handles');
+            }
+        };
+    });
+}
+
+// Helper function to save to visitors.json file (for file:// protocol) - DEPRECATED
+async function saveToVisitorsJS(visitorData) {
+    console.log('saveToVisitorsJS called with:', visitorData);
+    try {
+        // Try to load existing data from visitors.json via visitors.js
+        let existingData = [];
+        
+        // Check if visitors.js is already loaded
+        if (window.visitorsData && Array.isArray(window.visitorsData)) {
+            existingData = [...window.visitorsData];
+            console.log('Loaded existing data from window.visitorsData:', existingData.length, 'entries');
+        } else {
+            // Try to load from visitors.js file
+            try {
+                await loadVisitorsJS();
+                if (window.visitorsData && Array.isArray(window.visitorsData)) {
+                    existingData = [...window.visitorsData];
+                    console.log('Loaded existing data from visitors.js:', existingData.length, 'entries');
+                }
+            } catch (error) {
+                console.warn('Could not load existing visitors.js, starting fresh:', error);
+                existingData = [];
+            }
+        }
+        
+        // Add new visitor data
+        existingData.push(visitorData);
+        console.log('New data array:', existingData);
+        
+        // Update window.visitorsData
+        window.visitorsData = existingData;
+        
+        // Create JSON content for visitors.json
+        const jsonContent = JSON.stringify(existingData, null, 2);
+        
+        // Generate JavaScript content for visitors.js
+        const jsContent = `// Auto-generated JavaScript file from visitors.json
+// This file is updated automatically when visitors.json changes
+window.visitorsData = ${JSON.stringify(existingData, null, 2)};
+`;
+        
+        // Try to use File System Access API to write directly to files
+        if ('showDirectoryPicker' in window || 'showSaveFilePicker' in window) {
+            try {
+                let dataDirHandle = null;
+                
+                // Try to get stored directory handle
+                const storedHandle = sessionStorage.getItem('dataDirHandle');
+                if (storedHandle) {
+                    try {
+                        // Note: Handles can't be serialized, so we'll ask for directory each time
+                        // but user can select the same directory
+                        if ('showDirectoryPicker' in window) {
+                            dataDirHandle = await window.showDirectoryPicker();
+                            console.log('Got directory handle');
+                        }
+                    } catch (e) {
+                        console.log('Could not reuse directory handle');
+                    }
+                }
+                
+                // Get directory permission (user selects data folder)
+                if (!dataDirHandle && 'showDirectoryPicker' in window) {
+                    dataDirHandle = await window.showDirectoryPicker();
+                    console.log('Directory selected:', dataDirHandle.name);
+                }
+                
+                if (dataDirHandle) {
+                    // Write visitors.json
+                    const jsonFileHandle = await dataDirHandle.getFileHandle('visitors.json', { create: true });
+                    const jsonWritable = await jsonFileHandle.createWritable();
+                    await jsonWritable.write(jsonContent);
+                    await jsonWritable.close();
+                    console.log('✓ visitors.json saved directly to data folder');
+                    
+                    // Write visitors.js
+                    const jsFileHandle = await dataDirHandle.getFileHandle('visitors.js', { create: true });
+                    const jsWritable = await jsFileHandle.createWritable();
+                    await jsWritable.write(jsContent);
+                    await jsWritable.close();
+                    console.log('✓ visitors.js saved directly to data folder');
+                    
+                    alert(`✓ Data saved! Files updated in data folder.\n\nTotal visitors: ${existingData.length}`);
+                    return visitorData;
+                }
+                
+                // Fallback: Use showSaveFilePicker if directory picker not available
+                if ('showSaveFilePicker' in window) {
+                    // Request permission to save visitors.json
+                    const jsonHandle = await window.showSaveFilePicker({
+                        suggestedName: 'visitors.json',
+                        types: [{
+                            description: 'JSON files',
+                            accept: { 'application/json': ['.json'] }
+                        }]
+                    });
+                    
+                    const jsonWritable = await jsonHandle.createWritable();
+                    await jsonWritable.write(jsonContent);
+                    await jsonWritable.close();
+                    console.log('✓ visitors.json saved directly to file system');
+                    
+                    // Request permission to save visitors.js
+                    const jsHandle = await window.showSaveFilePicker({
+                        suggestedName: 'visitors.js',
+                        types: [{
+                            description: 'JavaScript files',
+                            accept: { 'application/javascript': ['.js'] }
+                        }]
+                    });
+                    
+                    const jsWritable = await jsHandle.createWritable();
+                    await jsWritable.write(jsContent);
+                    await jsWritable.close();
+                    console.log('✓ visitors.js saved directly to file system');
+                    
+                    alert(`✓ Data saved! Files updated.\n\nTotal visitors: ${existingData.length}`);
+                    return visitorData;
+                }
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    console.log('User cancelled file save, falling back to download');
+                    // Fall through to download method
+                } else {
+                    console.warn('File System Access API failed, falling back to download:', error);
+                    // Fall through to download method
+                }
+            }
+        }
+        
+        // Fallback: Auto-download files if File System Access API is not available
+        const jsonBlob = new Blob([jsonContent], { type: 'application/json' });
+        const jsonUrl = URL.createObjectURL(jsonBlob);
+        const jsBlob = new Blob([jsContent], { type: 'application/javascript' });
+        const jsUrl = URL.createObjectURL(jsBlob);
+        
+        // Auto-download visitors.json file
+        const downloadJSON = () => {
+            const a = document.createElement('a');
+            a.href = jsonUrl;
+            a.download = 'visitors.json';
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(jsonUrl), 100);
+        };
+        
+        // Auto-download visitors.js file
+        const downloadJS = () => {
+            setTimeout(() => {
+                const a = document.createElement('a');
+                a.href = jsUrl;
+                a.download = 'visitors.js';
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(jsUrl), 100);
+            }, 200);
+        };
+        
+        // Download JSON first, then JS
+        downloadJSON();
+        downloadJS();
+        
+        console.log('✓ Visitor information prepared for download:', visitorData);
+        console.log('✓ Total visitors:', existingData.length);
+        console.log('✓ Files downloaded. Please save them to:');
+        console.log('  - C:\\Project\\chaitanyaresort.com\\data\\visitors.json');
+        console.log('  - C:\\Project\\chaitanyaresort.com\\data\\visitors.js');
+        
+        // Show instruction
+        alert(`Data saved! Files downloaded.\n\nPlease save:\n1. visitors.json → C:\\Project\\chaitanyaresort.com\\data\\visitors.json\n2. visitors.js → C:\\Project\\chaitanyaresort.com\\data\\visitors.js\n\nTotal visitors: ${existingData.length}`);
+        
+        return visitorData;
+    } catch (error) {
+        console.error('Error saving to visitors.json:', error);
+        console.error('Error details:', error.message, error.stack);
+        return null;
+    }
+}
+
+// Helper function to load visitors.js
+function loadVisitorsJS() {
+    return new Promise((resolve, reject) => {
+        if (window.visitorsData && Array.isArray(window.visitorsData)) {
+            resolve(window.visitorsData);
+            return;
+        }
+        
+        const script = document.createElement('script');
+        script.src = 'data/visitors.js';
+        script.onload = () => {
+            if (window.visitorsData && Array.isArray(window.visitorsData)) {
+                resolve(window.visitorsData);
+            } else {
+                reject(new Error('visitors.js loaded but window.visitorsData not found'));
+            }
+        };
+        script.onerror = () => {
+            // File doesn't exist yet, that's okay
+            window.visitorsData = [];
+            resolve([]);
+        };
+        document.head.appendChild(script);
+    });
+}
+
+// Fallback function to save to localStorage (only used as last resort)
 function saveToLocalStorage(visitorData) {
+    console.log('saveToLocalStorage called with:', visitorData);
     try {
         if (typeof(Storage) !== "undefined" && localStorage) {
+            console.log('localStorage is available');
             const stored = localStorage.getItem('visitorInfo');
+            console.log('Existing stored data:', stored);
             const existingData = stored ? JSON.parse(stored) : [];
+            console.log('Parsed existing data:', existingData);
             existingData.push(visitorData);
-            localStorage.setItem('visitorInfo', JSON.stringify(existingData));
-            console.log('Visitor information saved to localStorage:', visitorData);
-            console.log('Total visitors in localStorage:', existingData.length);
-            return visitorData;
+            console.log('New data array:', existingData);
+    localStorage.setItem('visitorInfo', JSON.stringify(existingData));
+            console.log('✓ Visitor information saved to localStorage:', visitorData);
+            console.log('✓ Total visitors in localStorage:', existingData.length);
+    
+            // Verify it was saved
+            const verify = localStorage.getItem('visitorInfo');
+            console.log('Verification - data in localStorage:', verify);
+            
+    return visitorData;
         } else {
             console.error('localStorage is not available');
             return null;
         }
     } catch (error) {
         console.error('Error saving to localStorage:', error);
+        console.error('Error details:', error.message, error.stack);
         return null;
     }
 }
@@ -783,20 +1185,20 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const name = nameInput.value.trim();
         const contact = contactInput.value.trim();
-        
-        // Validate
-        if (!name || !contact) {
-            alert('Please fill in all fields / कृपया सर्व फील्ड भरा');
+            
+            // Validate
+            if (!name || !contact) {
+                alert('Please fill in all fields / कृपया सर्व फील्ड भरा');
             nameInput.focus();
-            return;
-        }
-        
-        if (contact.length !== 10 || !/^\d+$/.test(contact)) {
-            alert('Please enter a valid 10-digit contact number / कृपया वैध 10-अंकी संपर्क क्रमांक प्रविष्ट करा');
+                return;
+            }
+            
+            if (contact.length !== 10 || !/^\d+$/.test(contact)) {
+                alert('Please enter a valid 10-digit contact number / कृपया वैध 10-अंकी संपर्क क्रमांक प्रविष्ट करा');
             contactInput.focus();
-            return;
-        }
-        
+                return;
+            }
+            
         // Disable submit button to prevent double submission
         if (submitButton) {
             submitButton.disabled = true;
@@ -811,12 +1213,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Clear form
                 nameInput.value = '';
                 contactInput.value = '';
-                
-                // Hide modal
-                hideVisitorModal();
-                
-                // Show thank you message
-                alert('Thank you for your information! / आपल्या माहितीसाठी धन्यवाद!');
+            
+            // Hide modal
+            hideVisitorModal();
+            
+            // Show thank you message
+            alert('Thank you for your information! / आपल्या माहितीसाठी धन्यवाद!');
             } else {
                 alert('Error saving information. Please try again. / माहिती सेव्ह करताना त्रुटी. कृपया पुन्हा प्रयत्न करा.');
             }

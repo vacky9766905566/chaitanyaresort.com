@@ -72,10 +72,32 @@ $existingData[] = $visitorData;
 
 // Save to JSON file
 $jsonData = json_encode($existingData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-if (file_put_contents($jsonFile, $jsonData, LOCK_EX) === false) {
+$writeResult = file_put_contents($jsonFile, $jsonData, LOCK_EX);
+
+if ($writeResult === false) {
     http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Failed to save data']);
+    $error = 'Failed to save data to ' . $jsonFile;
+    // Check if directory is writable
+    if (!is_writable(dirname($jsonFile))) {
+        $error .= ' - Directory is not writable';
+    } elseif (file_exists($jsonFile) && !is_writable($jsonFile)) {
+        $error .= ' - File is not writable';
+    }
+    error_log('Save visitor error: ' . $error);
+    echo json_encode(['success' => false, 'error' => $error]);
     exit;
+}
+
+// Also update visitors.js file for file:// protocol support
+$jsFile = 'data/visitors.js';
+$jsContent = "// Auto-generated JavaScript file from visitors.json\n";
+$jsContent .= "// This file is updated automatically when visitors.json changes\n";
+$jsContent .= "window.visitorsData = " . json_encode($existingData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . ";\n";
+$jsWriteResult = file_put_contents($jsFile, $jsContent, LOCK_EX);
+
+if ($jsWriteResult === false) {
+    // Log warning but don't fail the request
+    error_log('Warning: Failed to update visitors.js file');
 }
 
 // Return success response

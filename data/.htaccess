@@ -1,12 +1,7 @@
-# Protect JSON file from direct access (optional - remove if you want to access the file directly)
+# Allow read access to JSON file for admin panel
+# PHP can write to it, but it can also be read via fetch
 <Files "visitors.json">
     Order allow,deny
-    Deny from all
-</Files>
-
-# Allow PHP to access the file
-<FilesMatch "\.php$">
-    Order allow,deny
     Allow from all
-</FilesMatch>
+</Files>
 

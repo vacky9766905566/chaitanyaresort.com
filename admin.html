@@ -451,15 +451,14 @@
         let visitorData = [];
         let mergedData = [];
         
-        // Load data from localStorage
-        function loadData() {
-            // Load WhatsApp click data
+        // Load data from server JSON file and localStorage
+        async function loadData() {
+            // Load WhatsApp click data from localStorage
             const stored = localStorage.getItem('whatsappClickTracking');
             allData = stored ? JSON.parse(stored) : [];
             
-            // Load visitor data
-            const visitorStored = localStorage.getItem('visitorInfo');
-            visitorData = visitorStored ? JSON.parse(visitorStored) : [];
+            // Load visitor data - try server first, then localStorage
+            await loadVisitorData();
             
             // Merge both data sources
             mergeData();
@@ -469,52 +468,152 @@
             updateFilters();
         }
         
+        // Load visitor data from server JSON file only
+        async function loadVisitorData() {
+            visitorData = []; // Initialize as empty
+            const isLocalFile = window.location.protocol === 'file:';
+            
+            if (isLocalFile) {
+                // Running from file:// - use script tag to load JS file (bypasses CORS)
+                console.log('Running from file:// protocol. Loading visitors.js via script tag');
+                
+                // Check if data is already loaded from script tag
+                if (window.visitorsData && Array.isArray(window.visitorsData)) {
+                    visitorData = window.visitorsData;
+                    console.log('✓ Loaded visitor data from window.visitorsData:', visitorData.length, 'entries');
+                    console.log('Visitor data:', visitorData);
+                    return;
+                }
+                
+                // Try to load via script tag
+                await new Promise((resolve) => {
+                    const script = document.createElement('script');
+                    script.src = 'data/visitors.js';
+                    script.onload = function() {
+                        if (window.visitorsData && Array.isArray(window.visitorsData)) {
+                            visitorData = window.visitorsData;
+                            console.log('✓ Loaded visitor data from script:', visitorData.length, 'entries');
+                            console.log('Visitor data:', visitorData);
+                        } else {
+                            console.warn('visitors.js loaded but window.visitorsData not found or not an array');
+                            visitorData = [];
+                        }
+                        resolve();
+                    };
+                    script.onerror = function() {
+                        console.error('Failed to load data/visitors.js. Make sure the file exists at: data/visitors.js');
+                        visitorData = [];
+                        resolve();
+                    };
+                    document.head.appendChild(script);
+                });
+                return;
+            }
+            
+            // Method 1: Try PHP endpoint first
+            try {
+                const response = await fetch('get-visitors.php');
+                if (response.ok) {
+                    const serverData = await response.json();
+                    if (Array.isArray(serverData)) {
+                        visitorData = serverData;
+                        console.log('✓ Loaded visitor data from PHP endpoint:', visitorData.length, 'entries');
+                        console.log('Visitor data:', visitorData);
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.warn('PHP endpoint failed, trying direct JSON file:', error);
+            }
+            
+            // Method 2: Try direct JSON file access
+            try {
+                const response = await fetch('data/visitors.json');
+                if (response.ok) {
+                    const serverData = await response.json();
+                    if (Array.isArray(serverData)) {
+                        visitorData = serverData;
+                        console.log('✓ Loaded visitor data from JSON file:', visitorData.length, 'entries');
+                        console.log('Visitor data:', visitorData);
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load from JSON file:', error);
+            }
+            
+            // If both methods failed, show error but don't use localStorage
+            console.error('Could not load visitor data from server. Make sure you are running on a web server (http:// or https://)');
+            visitorData = [];
+        }
+        
         // Merge WhatsApp clicks and visitor data
         function mergeData() {
             mergedData = [];
             
+            console.log('Merging data - WhatsApp clicks:', allData.length, 'Visitor data:', visitorData.length);
+            
             // Add WhatsApp clicks with type identifier
-            allData.forEach(item => {
-                mergedData.push({
-                    ...item,
-                    type: 'whatsapp',
-                    name: null,
-                    contact: null
+            if (Array.isArray(allData)) {
+                allData.forEach(item => {
+                    mergedData.push({
+                        ...item,
+                        type: 'whatsapp',
+                        name: item.name || null,
+                        contact: item.contact || null
+                    });
                 });
-            });
+            }
             
             // Add visitor data with type identifier
-            visitorData.forEach(item => {
-                mergedData.push({
-                    ...item,
-                    type: 'visitor',
-                    whatsappNumber: null
+            if (Array.isArray(visitorData) && visitorData.length > 0) {
+                console.log('Adding visitor data to merged array:', visitorData);
+                visitorData.forEach(item => {
+                    mergedData.push({
+                        ...item,
+                        type: 'visitor',
+                        whatsappNumber: item.whatsappNumber || null
+                    });
                 });
-            });
+            } else {
+                console.warn('Visitor data is empty or not an array:', visitorData);
+            }
+            
+            console.log('Total merged data:', mergedData.length);
             
             // Sort by timestamp (newest first)
-            mergedData.sort((a, b) => 
-                new Date(b.timestamp) - new Date(a.timestamp)
-            );
+            mergedData.sort((a, b) => {
+                try {
+                    return new Date(b.timestamp) - new Date(a.timestamp);
+                } catch (e) {
+                    return 0;
+                }
+            });
             
             filteredData = [...mergedData];
+            console.log('Filtered data count:', filteredData.length);
         }
         
         // Update statistics
         function updateStats() {
             const totalClicks = allData.length;
+            const totalVisitors = visitorData.length;
             const uniqueNumbers = new Set(allData.map(item => item.whatsappNumber)).size;
             const today = new Date().toISOString().split('T')[0];
             const todayClicks = allData.filter(item => item.timestamp.startsWith(today)).length;
+            const todayVisitors = visitorData.filter(item => item.timestamp.startsWith(today)).length;
             
-            document.getElementById('totalClicks').textContent = totalClicks;
+            document.getElementById('totalClicks').textContent = totalClicks + totalVisitors;
             document.getElementById('uniqueNumbers').textContent = uniqueNumbers;
-            document.getElementById('todayClicks').textContent = todayClicks;
+            document.getElementById('todayClicks').textContent = todayClicks + todayVisitors;
         }
         
         // Update merged table
         function updateMergedTable() {
             const tbody = document.getElementById('mergedTableBody');
+            
+            console.log('Updating table with filteredData:', filteredData.length, 'items');
+            console.log('Filtered data sample:', filteredData.slice(0, 3));
             
             if (filteredData.length === 0) {
                 tbody.innerHTML = `
@@ -522,6 +621,9 @@
                         <td colspan="8" class="no-data">
                             <i class="fas fa-inbox"></i>
                             <p>No data available</p>
+                            <p style="font-size: 0.8rem; margin-top: 10px; color: #666;">
+                                Visitor entries: ${visitorData.length} | WhatsApp clicks: ${allData.length}
+                            </p>
                         </td>
                     </tr>
                 `;
@@ -533,6 +635,15 @@
                     ? '<span style="background: #25D366; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem;">WhatsApp</span>'
                     : '<span style="background: #667eea; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem;">Visitor</span>';
                 
+                let formattedTimestamp = 'N/A';
+                try {
+                    if (item.timestamp) {
+                        formattedTimestamp = new Date(item.timestamp).toLocaleString();
+                    }
+                } catch (e) {
+                    formattedTimestamp = item.timestamp || 'N/A';
+                }
+                
                 return `
                     <tr>
                         <td>${index + 1}</td>
@@ -542,10 +653,12 @@
                         <td><strong>${item.name || '-'}</strong></td>
                         <td>${item.contact || '-'}</td>
                         <td class="whatsapp-number">${item.whatsappNumber ? '+' + item.whatsappNumber : '-'}</td>
-                        <td>${new Date(item.timestamp).toLocaleString()}</td>
+                        <td>${formattedTimestamp}</td>
                     </tr>
                 `;
             }).join('');
+            
+            console.log('Table updated successfully with', filteredData.length, 'rows');
         }
         
         // Update filter dropdown
@@ -636,7 +749,7 @@
         function clearData() {
             if (confirm('Are you sure you want to clear all tracking data? This action cannot be undone.')) {
                 localStorage.removeItem('whatsappClickTracking');
-                localStorage.removeItem('visitorInfo');
+                // Note: Visitor data is stored on server, not in localStorage
                 allData = [];
                 visitorData = [];
                 mergedData = [];
@@ -644,7 +757,7 @@
                 updateStats();
                 updateMergedTable();
                 updateFilters();
-                alert('All data cleared!');
+                alert('All data cleared from localStorage! Note: Visitor data in visitors.json on server is not cleared.');
             }
         }
         
@@ -729,13 +842,36 @@
             
             if (totalRemoved > 0) {
                 localStorage.setItem('whatsappClickTracking', JSON.stringify(uniqueWhatsAppData));
-                localStorage.setItem('visitorInfo', JSON.stringify(uniqueVisitorData));
+                // Note: Visitor data duplicates are removed from memory only
+                // To save to server, you would need to call save-visitor.php for each entry
                 loadData();
-                alert(`Removed ${totalRemoved} duplicate entries! (${whatsappRemoved} WhatsApp, ${visitorRemoved} Visitor)`);
+                alert(`Removed ${totalRemoved} duplicate entries! (${whatsappRemoved} WhatsApp, ${visitorRemoved} Visitor). Note: Visitor data changes are in memory only.`);
             } else {
                 alert('No duplicates found!');
             }
         }
+        
+        // Debug function to check visitor data
+        window.debugVisitorData = function() {
+            console.log('=== VISITOR DATA DEBUG ===');
+            console.log('visitorData:', visitorData);
+            console.log('visitorData length:', visitorData.length);
+            console.log('visitorData type:', Array.isArray(visitorData) ? 'Array' : typeof visitorData);
+            console.log('mergedData:', mergedData);
+            console.log('mergedData length:', mergedData.length);
+            console.log('filteredData length:', filteredData.length);
+            console.log('Current protocol:', window.location.protocol);
+            console.log('========================');
+            
+            // Try to fetch directly
+            fetch('get-visitors.php')
+                .then(r => r.json())
+                .then(data => {
+                    console.log('Direct fetch result:', data);
+                    console.log('Direct fetch data length:', Array.isArray(data) ? data.length : 'Not an array');
+                })
+                .catch(err => console.error('Direct fetch error:', err));
+        };
         
         // Check login on page load
         checkLogin();

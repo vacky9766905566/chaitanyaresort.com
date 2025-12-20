@@ -1,4 +1,6 @@
-[
+// Auto-generated JavaScript file from visitors.json
+// This file is updated automatically when visitors.json changes
+window.visitorsData = [
   {
     "timestamp": "2025-12-20T07:25:35.875Z",
     "name": "Vikramsinh Kadam",
@@ -20,4 +22,4 @@
     "date": "20/12/2025",
     "time": "13:23:46"
   }
-]
+];
