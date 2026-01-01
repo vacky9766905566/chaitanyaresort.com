@@ -1351,85 +1351,40 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    async function handleFormSubmission() {
+    function handleFormSubmission() {
         const nameInput = document.getElementById('visitorName');
         const contactInput = document.getElementById('visitorContact');
         const submitButton = visitorForm.querySelector('button[type="submit"]');
         
         if (!nameInput || !contactInput) {
             console.error('Form inputs not found');
-            alert('Error: Form inputs not found / त्रुटी: फॉर्म इनपुट सापडले नाहीत');
             return;
         }
         
         const name = nameInput.value.trim();
         const contact = contactInput.value.trim();
             
-            // Validate
-            if (!name || !contact) {
-                alert('Please fill in all fields / कृपया सर्व फील्ड भरा');
-            nameInput.focus();
-                return;
-            }
-            
-            if (contact.length !== 10 || !/^\d+$/.test(contact)) {
-                alert('Please enter a valid 10-digit contact number / कृपया वैध 10-अंकी संपर्क क्रमांक प्रविष्ट करा');
-            contactInput.focus();
-                return;
-            }
-            
-        // Show spinner and disable submit button
-        const submitBtn = document.getElementById('visitorSubmitBtn');
-        const spinner = document.getElementById('visitorSpinner');
-        const btnText = submitBtn ? submitBtn.querySelector('.btn-text') : null;
-        const globalSpinner = document.getElementById('globalSpinner');
-        
-        if (submitBtn) {
-            submitBtn.disabled = true;
-            submitBtn.classList.add('loading');
+        // Validate
+        if (!name || !contact) {
+            return;
         }
-        if (spinner) {
-            spinner.style.display = 'inline-block';
-        }
-        if (globalSpinner) {
-            globalSpinner.style.display = 'flex';
+            
+        if (contact.length !== 10 || !/^\d+$/.test(contact)) {
+            return;
         }
         
-        try {
-            // Save visitor information (async)
-            const saved = await saveVisitorInfo(name, contact);
-            
-            if (saved) {
-                // Clear form
-                nameInput.value = '';
-                contactInput.value = '';
-                
-                // Hide modal
-                hideVisitorModal();
-                
-                // Show thank you message
-                alert('Thank you for your information! / आपल्या माहितीसाठी धन्यवाद!');
-            } else {
-                alert('Error saving information. Please try again. / माहिती सेव्ह करताना त्रुटी. कृपया पुन्हा प्रयत्न करा.');
-            }
-        } catch (error) {
-            console.error('Error in form submission:', error);
-            // Show user-friendly error message
-            const errorMessage = error.message || 'Error saving information. Please try again. / माहिती सेव्ह करताना त्रुटी. कृपया पुन्हा प्रयत्न करा.';
-            alert(errorMessage);
-        } finally {
-            // Hide spinner and re-enable submit button
-            if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.classList.remove('loading');
-            }
-            if (spinner) {
-                spinner.style.display = 'none';
-            }
-            if (globalSpinner) {
-                globalSpinner.style.display = 'none';
-            }
-        }
+        // Close modal immediately
+        hideVisitorModal();
+        
+        // Clear form
+        nameInput.value = '';
+        contactInput.value = '';
+        
+        // Submit in background without waiting for response
+        saveVisitorInfo(name, contact).catch(error => {
+            console.error('Error saving visitor information in background:', error);
+            // Silently handle error - no alerts or spinners
+        });
     }
     
     // Show modal after a short delay (1 second) on page load
