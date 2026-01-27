@@ -18,6 +18,14 @@ if (!$pdo) {
 }
 
 try {
+    // Check if visitors table exists
+    $tableCheck = $pdo->query("SHOW TABLES LIKE 'visitors'");
+    if ($tableCheck->rowCount() === 0) {
+        // Return empty array if table doesn't exist
+        echo json_encode([], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    
     // Get optional query parameters
     $type = isset($_GET['type']) ? $_GET['type'] : null;
     $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : null;

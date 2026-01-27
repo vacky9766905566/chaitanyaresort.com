@@ -218,6 +218,73 @@ include 'includes/navigation.php';
         </div>
     </section>
 
+    <!-- Feedback/Testimonial Section -->
+    <section id="feedback" class="feedback-section">
+        <div class="container">
+            <h2 class="section-title">आमच्या ग्राहकांचे अभिप्राय</h2>
+            <p class="section-subtitle">आपले अनुभव आमच्यासोबत सामायिक करा</p>
+            
+            <!-- Feedback Form -->
+            <div class="feedback-form-container">
+                <form id="feedbackForm" class="feedback-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="feedbackName">नाव <span class="required">*</span></label>
+                            <input type="text" id="feedbackName" name="name" required placeholder="आपले नाव प्रविष्ट करा">
+                        </div>
+                        <div class="form-group">
+                            <label for="feedbackEmail">ईमेल</label>
+                            <input type="email" id="feedbackEmail" name="email" placeholder="आपला ईमेल प्रविष्ट करा">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="feedbackContact">संपर्क क्रमांक</label>
+                            <input type="tel" id="feedbackContact" name="contact" pattern="[0-9]{10}" maxlength="10" placeholder="10 अंकी क्रमांक">
+                        </div>
+                        <div class="form-group">
+                            <label for="feedbackRating">रेटिंग</label>
+                            <div class="rating-input">
+                                <input type="radio" id="rating5" name="rating" value="5">
+                                <label for="rating5" class="star">★</label>
+                                <input type="radio" id="rating4" name="rating" value="4">
+                                <label for="rating4" class="star">★</label>
+                                <input type="radio" id="rating3" name="rating" value="3">
+                                <label for="rating3" class="star">★</label>
+                                <input type="radio" id="rating2" name="rating" value="2">
+                                <label for="rating2" class="star">★</label>
+                                <input type="radio" id="rating1" name="rating" value="1">
+                                <label for="rating1" class="star">★</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="feedbackMessage">आपले अभिप्राय <span class="required">*</span></label>
+                        <textarea id="feedbackMessage" name="message" rows="4" required placeholder="आपले अनुभव आणि अभिप्राय येथे लिहा"></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">
+                            <span class="btn-text">सबमिट करा</span>
+                            <span class="spinner" id="feedbackSpinner" style="display: none;">
+                                <i class="fas fa-spinner fa-spin"></i>
+                            </span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Feedbacks Display -->
+            <div class="feedbacks-container">
+                <div id="feedbacksList" class="feedbacks-list">
+                    <!-- Feedbacks will be loaded here -->
+                </div>
+                <div id="feedbacksPagination" class="pagination">
+                    <!-- Pagination will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- CTA Section -->
     <section class="cta">
         <div class="container">

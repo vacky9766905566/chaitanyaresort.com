@@ -28,6 +28,10 @@ function getDBConnection() {
         return $pdo;
     } catch (PDOException $e) {
         error_log("Database connection error: " . $e->getMessage());
+        // Return more detailed error for debugging (remove in production)
+        if (defined('DEBUG') && DEBUG) {
+            error_log("DB_HOST: " . DB_HOST . ", DB_NAME: " . DB_NAME . ", DB_USER: " . DB_USER);
+        }
         return null;
     }
 }

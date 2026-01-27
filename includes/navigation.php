@@ -12,7 +12,8 @@
                     <li><a href="#amenities">सुविधा</a></li>
                     <li><a href="#information">माहिती</a></li>
                     <li><a href="#location">स्थान</a></li>
-                    <li><a href="#contact">संपर्क</a></li>
+                    <li><a href="#feedback">अभिप्राय</a></li>
+                    <!-- <li><a href="#contact">संपर्क</a></li> -->
                 </ul>
                 <div class="hamburger" id="hamburger">
                     <span></span>

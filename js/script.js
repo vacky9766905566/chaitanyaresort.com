@@ -598,29 +598,47 @@ function attachWhatsAppTracking() {
         return;
     }
     
+    // Store WhatsApp href for redirect after form submission
+    let pendingWhatsAppHref = null;
+    
     // Use event delegation on the container - single event listener to prevent duplicates
     if (floatingButtonsContainer) {
-        // Track on mousedown (fires before navigation) - single listener to avoid duplicates
-        floatingButtonsContainer.addEventListener('mousedown', function(e) {
+        // Track on click - show modal first, then handle navigation after form submission
+        floatingButtonsContainer.addEventListener('click', function(e) {
             const button = e.target.closest('.floating-btn-whatsapp');
             if (button) {
+                e.preventDefault(); // Prevent immediate navigation
                 const href = button.getAttribute('href');
                 const whatsappNumber = extractWhatsAppNumber(href);
                 
                 if (whatsappNumber) {
-                    // Save the click data (deduplication handled in saveClickTracking)
-                    // Note: saveClickTracking is now async and saves to visitors.json
+                    // Store the WhatsApp href for later redirect
+                    pendingWhatsAppHref = href;
+                    
+                    // Track the click
                     saveClickTracking(whatsappNumber).then(clickData => {
-                        console.log('WhatsApp button clicked - Tracking saved to visitors.json:', clickData);
+                        console.log('WhatsApp button clicked - Tracking saved:', clickData);
                     }).catch(error => {
                         console.error('Error tracking WhatsApp click:', error);
                     });
+                    
+                    // Show visitor modal
+                    showVisitorModal();
                 } else {
                     console.warn('Could not extract WhatsApp number from:', href);
+                    // If we can't extract number, just navigate normally
+                    window.open(href, '_blank');
                 }
             }
         }, true); // Use capture phase
     }
+    
+    // Make pendingWhatsAppHref available globally for form submission
+    window.pendingWhatsAppHref = null;
+    Object.defineProperty(window, 'pendingWhatsAppHref', {
+        get: () => pendingWhatsAppHref,
+        set: (value) => { pendingWhatsAppHref = value; }
+    });
     
     // Make download function available globally for admin use
     window.downloadWhatsAppTrackingData = downloadTrackingData;
@@ -1373,6 +1391,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
+        // Get pending WhatsApp href before clearing
+        const whatsappHref = window.pendingWhatsAppHref;
+        
         // Close modal immediately
         hideVisitorModal();
         
@@ -1380,17 +1401,25 @@ document.addEventListener('DOMContentLoaded', () => {
         nameInput.value = '';
         contactInput.value = '';
         
-        // Submit in background without waiting for response
-        saveVisitorInfo(name, contact).catch(error => {
-            console.error('Error saving visitor information in background:', error);
-            // Silently handle error - no alerts or spinners
+        // Clear pending WhatsApp href
+        window.pendingWhatsAppHref = null;
+        
+        // Submit to backend, then redirect to WhatsApp
+        saveVisitorInfo(name, contact).then(() => {
+            // After successful save, redirect to WhatsApp
+            if (whatsappHref) {
+                window.open(whatsappHref, '_blank');
+            }
+        }).catch(error => {
+            console.error('Error saving visitor information:', error);
+            // Even if save fails, redirect to WhatsApp if href exists
+            if (whatsappHref) {
+                window.open(whatsappHref, '_blank');
+            }
         });
     }
     
-    // Show modal after a short delay (1 second) on page load
-    setTimeout(() => {
-        showVisitorModal();
-    }, 1000);
+    // Modal will be shown when WhatsApp button is clicked (not on page load)
 });
 
 // Initialize on page load
@@ -1407,4 +1436,196 @@ document.addEventListener('DOMContentLoaded', () => {
             heroContent.style.transition = 'opacity 1s ease';
         }, 100);
     }
+    
+    // Initialize feedback functionality
+    initFeedbackSection();
 });
+
+// Feedback Section Functionality
+let currentFeedbackPage = 1;
+const feedbacksPerPage = 6;
+
+async function initFeedbackSection() {
+    const feedbackForm = document.getElementById('feedbackForm');
+    if (feedbackForm) {
+        feedbackForm.addEventListener('submit', handleFeedbackSubmit);
+    }
+    
+    // Load feedbacks on page load
+    await loadFeedbacks(1);
+}
+
+async function handleFeedbackSubmit(e) {
+    e.preventDefault();
+    
+    const form = e.target;
+    const formData = new FormData(form);
+    const submitButton = form.querySelector('button[type="submit"]');
+    const spinner = document.getElementById('feedbackSpinner');
+    const btnText = submitButton.querySelector('.btn-text');
+    
+    // Get form values
+    const feedbackData = {
+        name: formData.get('name').trim(),
+        email: formData.get('email')?.trim() || null,
+        contact: formData.get('contact')?.trim() || null,
+        rating: formData.get('rating') ? parseInt(formData.get('rating')) : null,
+        message: formData.get('message').trim()
+    };
+    
+    // Validate
+    if (!feedbackData.name || !feedbackData.message) {
+        alert('कृपया नाव आणि अभिप्राय प्रविष्ट करा');
+        return;
+    }
+    
+    // Show loading state
+    submitButton.disabled = true;
+    spinner.style.display = 'inline-block';
+    btnText.textContent = 'सबमिट करत आहे...';
+    
+    try {
+        const response = await fetch('save-feedback.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(feedbackData)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Reset form
+            form.reset();
+            
+            // Show success message
+            alert('धन्यवाद! आपला अभिप्राय सबमिट झाला आहे आणि तो आत्ताच प्रदर्शित केला जाईल.');
+            
+            // Reload feedbacks immediately to show the new feedback
+            await loadFeedbacks(1);
+        } else {
+            alert('त्रुटी: ' + (result.error || 'अभिप्राय सबमिट करताना समस्या आली'));
+        }
+    } catch (error) {
+        console.error('Error submitting feedback:', error);
+        alert('त्रुटी: अभिप्राय सबमिट करताना समस्या आली');
+    } finally {
+        // Reset button state
+        submitButton.disabled = false;
+        spinner.style.display = 'none';
+        btnText.textContent = 'सबमिट करा';
+    }
+}
+
+async function loadFeedbacks(page = 1) {
+    const feedbacksList = document.getElementById('feedbacksList');
+    const paginationContainer = document.getElementById('feedbacksPagination');
+    
+    if (!feedbacksList || !paginationContainer) {
+        return;
+    }
+    
+    // Show loading state
+    feedbacksList.innerHTML = '<div style="text-align: center; padding: 40px;">लोड होत आहे...</div>';
+    
+    try {
+        const response = await fetch(`get-feedbacks.php?page=${page}&per_page=${feedbacksPerPage}&status=approved`);
+        const result = await response.json();
+        
+        if (result.success) {
+            currentFeedbackPage = page;
+            displayFeedbacks(result.feedbacks);
+            displayPagination(result.pagination);
+        } else {
+            feedbacksList.innerHTML = '<div style="text-align: center; padding: 40px; color: #999;">अभिप्राय लोड करताना समस्या आली</div>';
+        }
+    } catch (error) {
+        console.error('Error loading feedbacks:', error);
+        feedbacksList.innerHTML = '<div style="text-align: center; padding: 40px; color: #999;">अभिप्राय लोड करताना समस्या आली</div>';
+    }
+}
+
+function displayFeedbacks(feedbacks) {
+    const feedbacksList = document.getElementById('feedbacksList');
+    
+    if (!feedbacksList) return;
+    
+    if (feedbacks.length === 0) {
+        feedbacksList.innerHTML = '<div style="text-align: center; padding: 40px; color: #999;">अद्याप कोणतेही अभिप्राय नाहीत</div>';
+        return;
+    }
+    
+    feedbacksList.innerHTML = feedbacks.map(feedback => {
+        const ratingStars = feedback.rating 
+            ? '★'.repeat(feedback.rating) + '☆'.repeat(5 - feedback.rating)
+            : '';
+        
+        const date = new Date(feedback.created_at).toLocaleDateString('mr-IN', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+        
+        return `
+            <div class="feedback-card">
+                <div class="feedback-header">
+                    <div>
+                        <div class="feedback-name">${escapeHtml(feedback.name)}</div>
+                    </div>
+                    ${ratingStars ? `<div class="feedback-rating">${ratingStars}</div>` : ''}
+                </div>
+                <div class="feedback-message">${escapeHtml(feedback.message)}</div>
+                <div class="feedback-date">${date}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function displayPagination(pagination) {
+    const paginationContainer = document.getElementById('feedbacksPagination');
+    
+    if (!paginationContainer) return;
+    
+    if (pagination.total_pages <= 1) {
+        paginationContainer.innerHTML = '';
+        return;
+    }
+    
+    let paginationHTML = '';
+    
+    // Previous button
+    paginationHTML += `
+        <button onclick="loadFeedbacks(${pagination.page - 1})" 
+                ${!pagination.has_prev ? 'disabled' : ''}>
+            मागील
+        </button>
+    `;
+    
+    // Page info
+    paginationHTML += `
+        <span class="page-info">
+            पृष्ठ ${pagination.page} / ${pagination.total_pages}
+        </span>
+    `;
+    
+    // Next button
+    paginationHTML += `
+        <button onclick="loadFeedbacks(${pagination.page + 1})" 
+                ${!pagination.has_next ? 'disabled' : ''}>
+            पुढील
+        </button>
+    `;
+    
+    paginationContainer.innerHTML = paginationHTML;
+}
+
+// Helper function to escape HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Make loadFeedbacks available globally for pagination buttons
+window.loadFeedbacks = loadFeedbacks;

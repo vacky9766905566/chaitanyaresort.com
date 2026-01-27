@@ -84,11 +84,22 @@ $pdo = getDBConnection();
 
 if (!$pdo) {
     http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Database connection failed']);
+    echo json_encode(['success' => false, 'error' => 'Database connection failed. Please check your database configuration.']);
     exit;
 }
 
 try {
+    // Check if visitors table exists
+    $tableCheck = $pdo->query("SHOW TABLES LIKE 'visitors'");
+    if ($tableCheck->rowCount() === 0) {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false, 
+            'error' => 'Visitors table does not exist. Please run database.sql to create it.'
+        ]);
+        exit;
+    }
+    
     // Insert visitor data into database
     $stmt = $pdo->prepare("
         INSERT INTO visitors (timestamp, name, contact, whatsapp_number, type, date, time)
@@ -121,9 +132,14 @@ try {
 } catch (PDOException $e) {
     error_log('Database error in save-visitor.php: ' . $e->getMessage());
     http_response_code(500);
+    $errorMessage = 'Failed to save data to database';
+    // Include more details in development
+    if (isset($_SERVER['SERVER_NAME']) && ($_SERVER['SERVER_NAME'] === 'localhost' || $_SERVER['SERVER_NAME'] === '127.0.0.1')) {
+        $errorMessage .= ': ' . $e->getMessage();
+    }
     echo json_encode([
         'success' => false,
-        'error' => 'Failed to save data to database'
+        'error' => $errorMessage
     ]);
 }
 ?>
