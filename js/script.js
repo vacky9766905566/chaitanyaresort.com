@@ -71,24 +71,6 @@
     });
   }
 
-  var visitorModal = document.getElementById('visitorModal');
-  var visitorForm = document.getElementById('visitorForm');
-  if (visitorModal && visitorForm) {
-    var vKey = 'chaitanya_visitor_ok';
-    try {
-      if (!localStorage.getItem(vKey)) visitorModal.classList.add('active');
-    } catch (err) {
-      visitorModal.classList.add('active');
-    }
-    visitorForm.addEventListener('submit', function (e) {
-      e.preventDefault();
-      try {
-        localStorage.setItem(vKey, '1');
-      } catch (err2) {}
-      visitorModal.classList.remove('active');
-    });
-  }
-
   var feedbackForm = document.getElementById('feedbackForm');
   if (feedbackForm) {
     feedbackForm.addEventListener('submit', function (e) {
