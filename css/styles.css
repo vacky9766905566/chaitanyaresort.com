@@ -55,11 +55,239 @@ em {
     padding: 0 22px;
 }
 
-/* ——— Nav ——— */
-.navbar {
+/* ——— Site header ——— */
+.site-header {
     position: sticky;
     top: 0;
     z-index: 1000;
+}
+
+.booking-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem 1.5rem;
+    flex-wrap: wrap;
+    padding: 0.65rem 0;
+}
+
+.booking-strip--hero {
+    padding-top: 0;
+    padding-bottom: 0.35rem;
+}
+
+.booking-strip--hero .booking-strip-label {
+    color: rgba(255, 255, 255, 0.88);
+    text-shadow: 0 1px 12px rgba(0, 0, 0, 0.35);
+}
+
+.hero-booking {
+    margin-bottom: 1.5rem;
+    max-width: 640px;
+}
+
+.hero-booking .booking-ota {
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.28);
+}
+
+.hero-booking .booking-ota:hover {
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.32);
+}
+
+/* Hero OTA: desktop — align with headline column, equal cards, grouped layout */
+@media (min-width: 521px) {
+    .hero-booking .booking-strip--hero {
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
+        gap: 0.75rem;
+        padding: 1rem 1.2rem;
+        background: rgba(12, 18, 34, 0.42);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+    }
+
+    .hero-booking .booking-strip-label {
+        letter-spacing: 0.16em;
+    }
+
+    .hero-booking .booking-ota-row {
+        justify-content: stretch;
+        align-items: stretch;
+        flex: none;
+        width: 100%;
+        gap: 0.65rem;
+    }
+
+    .hero-booking .booking-ota {
+        flex: 1 1 0;
+        min-width: 0;
+        max-width: none;
+        padding: 0.65rem 1rem 0.65rem 1.1rem;
+        border-radius: 12px;
+    }
+
+    .hero-booking .booking-ota-brand {
+        gap: 0.6rem;
+    }
+
+    .hero-booking .logo-mmt-type,
+    .hero-booking .logo-goibibo-type {
+        font-size: 0.95rem;
+    }
+
+    .hero-booking .booking-ota-cta {
+        font-size: 0.78rem;
+    }
+}
+
+.booking-strip-label {
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+}
+
+.booking-ota-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    flex: 1 1 auto;
+}
+
+.booking-ota {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex: 1 1 248px;
+    max-width: 360px;
+    min-width: min(100%, 248px);
+    padding: 0.55rem 1.05rem 0.55rem 1.15rem;
+    border-radius: 14px;
+    text-decoration: none;
+    color: var(--ink);
+    background: #fff;
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.booking-ota:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+}
+
+.booking-ota--mmt:hover {
+    border-color: rgba(0, 168, 232, 0.4);
+}
+
+.booking-ota--goibibo:hover {
+    border-color: rgba(227, 30, 36, 0.4);
+}
+
+.booking-ota-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    min-width: 0;
+}
+
+.logo-mmt-mark {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    width: 24px;
+    flex-shrink: 0;
+}
+
+.logo-mmt-mark__bar {
+    display: block;
+    height: 4px;
+    border-radius: 2px;
+}
+
+.logo-mmt-mark__bar--blue {
+    background: #00a8e8;
+}
+
+.logo-mmt-mark__bar--red {
+    background: #ff3b30;
+}
+
+.logo-mmt-type {
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: 1.02rem;
+    letter-spacing: -0.045em;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.logo-mmt-type__b {
+    color: #00a8e8;
+}
+
+.logo-mmt-type__r {
+    color: #ff3b30;
+}
+
+.logo-goibibo-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.55rem;
+    height: 1.55rem;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #ff4755 0%, #e31e24 55%, #c41218 100%);
+    color: #fff;
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: 0.95rem;
+    line-height: 1;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(227, 30, 36, 0.35);
+}
+
+.logo-goibibo-type {
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: 1.02rem;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    color: #e31e24;
+    white-space: nowrap;
+}
+
+.booking-ota-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--sea);
+    white-space: nowrap;
+}
+
+.booking-ota-cta i {
+    font-size: 0.68rem;
+    opacity: 0.88;
+}
+
+.booking-ota--goibibo .booking-ota-cta {
+    color: #b81920;
+}
+
+/* ——— Nav ——— */
+.navbar {
     background: rgba(246, 243, 238, 0.88);
     backdrop-filter: blur(14px);
     border-bottom: 1px solid var(--line);
@@ -252,6 +480,10 @@ em {
     position: relative;
     z-index: 2;
     padding: 6rem 22px 5rem;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
 }
 
 .hero-copy {
@@ -1517,6 +1749,35 @@ em {
         right: auto;
         margin-top: 1rem;
         max-width: none;
+    }
+}
+
+@media (max-width: 520px) {
+    .booking-strip {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .booking-ota-row {
+        flex-direction: column;
+        justify-content: stretch;
+    }
+
+    .booking-ota {
+        max-width: none;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .logo-mmt-type,
+    .logo-goibibo-type {
+        font-size: 0.92rem;
+    }
+
+    .logo-goibibo-mark {
+        width: 1.4rem;
+        height: 1.4rem;
+        font-size: 0.85rem;
     }
 }
 
